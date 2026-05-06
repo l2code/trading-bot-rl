@@ -33,21 +33,26 @@ from rl_swing.rl.env.execution_simulator import TradeOutcome
 
 @dataclass
 class RewardModel:
+    """Reward model for the trade-filter / selector envs.
+
+    Defaults are calibrated for **portfolio-scale, sized returns**
+    post-FIX-22/23/#50. With size_pct=0.10, atr_stop=8% asset, a
+    typical winner has risk_adj ≈ +0.4-0.8 (portfolio scale).
+    Penalties are tuned to be small relative to that range so the
+    discriminating signal isn't crowded out — see FIX-#49 for the
+    calibration discussion.
+
+    A previous calibration (turnover=0.30, holding=0.05) was tuned
+    for the OLD unsized return scale and made every winner net-
+    negative under sized returns; the agent collapsed to all-skip.
+    Defaults updated to FIX-#58 to match the YAML weights, so any
+    direct ``RewardModel()`` construction (smoke tests, default
+    env path) gets the calibrated values out of the box.
+    """
     target_risk_pct: float = 0.02
     drawdown_penalty_weight: float = 0.10
-    # 0.30 risk-adjusted units per trade (was 0.02 — way too small to
-    # affect choice). With reward_clip=5, a marginal +0.5 risk-adj
-    # winner now nets 0.20, while skipping it under full-mirror costs
-    # 0.50; so taking weak winners is still right, but a near-zero EV
-    # trade is clearly skip-worthy.
-    turnover_penalty_weight: float = 0.30
-    holding_period_penalty_weight: float = 0.05
-    # Scale for the mirrored counterfactual on skip. With the
-    # turnover_penalty_weight bump above, the take-side is paying a
-    # 0.30 floor cost per trade. Full mirror (1.0) is now appropriate:
-    # both "always take" and "always skip" are strictly dominated by
-    # a discriminating policy, and the trade-cost floor keeps the
-    # take side from dominating purely on positive base rate.
+    turnover_penalty_weight: float = 0.05         # FIX-#58: was 0.30
+    holding_period_penalty_weight: float = 0.02   # FIX-#58: was 0.05
     skip_counterfactual_scale: float = 1.0
     reward_clip: float = 5.0
 

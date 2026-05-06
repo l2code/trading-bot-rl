@@ -67,9 +67,18 @@ def evaluate_policy(
     cost_model: EquityExecutionModel,
     reward_model: RewardModel,
     cost_stress_multiplier: float = 1.0,
+    eval_window_start: date | None = None,    # FIX-#56
+    eval_window_end: date | None = None,      # FIX-#56
 ) -> dict:
     """Replay every candidate through the same pipeline the env would,
-    using ``scorer`` as the policy."""
+    using ``scorer`` as the policy.
+
+    ``eval_window_start`` / ``eval_window_end`` (FIX-#56): the FULL
+    test/validation window. Used to fill idle days in the daily-P&L
+    series so a policy that's flat for the first/last months gets
+    those idle days counted. If omitted, idle-day fill is disabled
+    (legacy behavior — Sharpe/DD computed only on active days).
+    """
     cost_model.cost_stress_multiplier = float(cost_stress_multiplier)
     sim = ExecutionSimulator()
 
@@ -109,7 +118,11 @@ def evaluate_policy(
         atr_pct = float(frame.values.get("atr_pct_14", 0.02))
         rv20 = float(frame.values.get("realized_vol_20", 0.20))
         adv = float(frame.values.get("dollar_volume", 0.0))
-        notional = 100_000.0 * c.base_size_pct * size_mult
+        # FIX-#59: skip CF is simulated at full base_size_pct, so cost
+        # must reflect full notional (otherwise impact is zeroed).
+        # Mirrors FIX-#54 in the env.
+        cf_size_mult = 1.0 if size_mult <= 0 else size_mult
+        notional = 100_000.0 * c.base_size_pct * cf_size_mult
         bps = cost_model.cost_bps(
             atr_pct=atr_pct,
             volatility_percentile=min(1.0, rv20 / 0.6),
@@ -171,23 +184,30 @@ def evaluate_policy(
             })
 
     # FIX-#36: primary metrics now come from the date-ordered daily-
-    # P&L path. FIX-#52: pass the test window so idle days fill as
-    # zero P&L (otherwise Sharpe/DD computed only on active days).
+    # P&L path. FIX-#52 + #56: window is the FULL test window
+    # (passed in by the caller), not the min/max trade span. A
+    # policy that's flat for the first or last months of the test
+    # window must still get those idle days included or Sharpe/DD
+    # are inflated by ignoring the flat periods.
     from rl_swing.rl.validation.metrics import (
         validation_composite_score_from_daily_pnl,
     )
-    if trade_records:
-        win_start = min(t.entry_date for t in trade_records)
-        win_end = max(t.exit_date for t in trade_records)
-    else:
-        win_start = win_end = None
+    # FIX-#57: build the trading-day calendar from the bars list so
+    # P&L spreads across actual trading days (not weekends).
+    trading_days = sorted({b.timestamp.date() for b in bars})
+    if eval_window_start is not None and eval_window_end is not None:
+        trading_days = [
+            d for d in trading_days
+            if eval_window_start <= d <= eval_window_end
+        ]
     score, breakdown = validation_composite_score_from_daily_pnl(
         trades=trade_records,
         n_total_packs=len(actions),
         rewards=rewards,
         actions=actions,
-        window_start=win_start,
-        window_end=win_end,
+        window_start=eval_window_start,
+        window_end=eval_window_end,
+        trading_days=trading_days or None,
     )
     legacy_score, legacy_breakdown = validation_composite_score(
         net_returns=net_returns,

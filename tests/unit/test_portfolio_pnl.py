@@ -167,6 +167,46 @@ def test_idle_days_fill_with_zero_when_window_given():
     assert daily[date(2024, 1, 8)] != 0.0
 
 
+def test_trading_days_spread_skips_weekends():
+    """FIX-#57: with a trading_days calendar, P&L spreads on
+    actual trading days only — not Saturdays/Sundays."""
+    # A Friday-to-Monday trade: 3 calendar days but 2 trading days.
+    # Provide a calendar with only weekdays.
+    t = TradeRecord(
+        entry_date=date(2024, 1, 5),    # Friday
+        exit_date=date(2024, 1, 8),     # Monday
+        return_pct=0.04,
+        size_pct=0.10,
+    )
+    trading_days = [date(2024, 1, d) for d in range(1, 13)
+                    if date(2024, 1, d).weekday() < 5]
+    daily = daily_portfolio_pnl([t], trading_days=trading_days)
+    # Should spread 0.04 across 2 trading days = 0.02 each.
+    # Saturday/Sunday must NOT have entries.
+    assert date(2024, 1, 5) in daily
+    assert date(2024, 1, 8) in daily
+    assert date(2024, 1, 6) not in daily   # Saturday
+    assert date(2024, 1, 7) not in daily   # Sunday
+    # Friday + Monday share the 0.04 total.
+    fri_mon_total = daily[date(2024, 1, 5)] + daily[date(2024, 1, 8)]
+    assert abs(fri_mon_total - 0.04) < 1e-9
+
+
+def test_trading_days_skips_trades_outside_calendar():
+    """A trade that falls entirely outside the supplied calendar
+    is silently skipped (rather than crashing)."""
+    t = TradeRecord(
+        entry_date=date(2020, 1, 1),
+        exit_date=date(2020, 1, 5),
+        return_pct=0.05,
+        size_pct=0.10,
+    )
+    trading_days = [date(2024, 6, d) for d in range(3, 8)]
+    daily = daily_portfolio_pnl([t], trading_days=trading_days)
+    # Only the calendar's idle-fill zeros, no contribution from t.
+    assert all(v == 0.0 for v in daily.values())
+
+
 def test_idle_days_no_fill_when_window_not_given():
     """Backward compat: omitting the window keeps old behavior
     (only active days emitted)."""

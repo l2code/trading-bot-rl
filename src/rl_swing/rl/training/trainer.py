@@ -373,7 +373,11 @@ def _run_single_seed(
             if self.num_timesteps - self.last_eval_step < eval_interval:
                 return True
             self.last_eval_step = self.num_timesteps
-            score, breakdown = _evaluate(model, val_env)
+            score, breakdown = _evaluate(
+                model, val_env,
+                window_start=cfg.validation_start,    # FIX-#56
+                window_end=cfg.validation_end,        # FIX-#56
+            )
             eval_history.append({
                 "timesteps": int(self.num_timesteps),
                 "validation_composite_score": score,
@@ -431,7 +435,11 @@ def _run_single_seed(
 
 
 # ---------------------------------------------------------------------
-def _evaluate(model, env) -> tuple[float, dict]:
+def _evaluate(
+    model, env, *,
+    window_start: date | None = None,
+    window_end: date | None = None,
+) -> tuple[float, dict]:
     """One full pass through the chronological validation env.
 
     FIX-#51: scores against the SAME metric the walk-forward report
@@ -440,6 +448,12 @@ def _evaluate(model, env) -> tuple[float, dict]:
     so ``best.zip`` could be selected by a metric the final report
     no longer trusts. Now the entire training-time selection +
     final report agree.
+
+    FIX-#56: ``window_start`` / ``window_end`` should be the
+    validation window (cfg.validation_start / cfg.validation_end).
+    Idle days are filled with zero P&L so a policy that's flat for
+    parts of the window still gets those days included in
+    Sharpe / max-DD.
     """
     from rl_swing.rl.validation.metrics import (
         validation_composite_score_from_daily_pnl,
@@ -476,5 +490,7 @@ def _evaluate(model, env) -> tuple[float, dict]:
         n_total_packs=len(actions_taken),
         rewards=rewards,
         actions=actions_taken,
+        window_start=window_start,
+        window_end=window_end,
     )
     return score, breakdown
