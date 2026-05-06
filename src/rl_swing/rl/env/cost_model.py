@@ -1,11 +1,27 @@
 """Equity execution / cost model.
 
 Implements the spec's `equity_execution_model` configuration knobs. A
-``EquityExecutionModel.cost_bps(...)`` call returns total per-side
-basis points to debit from a simulated trade.
+``EquityExecutionModel.cost_bps(...)`` call returns total **per-side**
+basis points to debit from a simulated fill.
+
+A round-trip trade involves TWO fills (entry + exit), so callers
+that simulate a complete round-trip (e.g.,
+``ExecutionSimulator.simulate``) must multiply this number by 2 to
+get the round-trip cost drag. The convention is per-side here so
+the cost-stress 2x multiplier is intuitive against per-side
+numbers, and so callers that genuinely want only one side
+(e.g., partial fills, hedging legs) get the right answer without
+dividing.
+
+Component meanings (all per-side):
+    base_spread_bps              — half the bid-ask cost per fill
+    base_slippage_bps            — execution slippage per fill
+    market_impact (computed)     — notional-dependent impact per fill
+    adverse_selection_bps        — informational disadvantage per fill
 
 This module is intentionally adapter-free — the env passes pure
-numbers in. Cost-stress tests work by passing a multiplier.
+numbers in. Cost-stress tests work by passing a multiplier
+(`cost_stress_multiplier`).
 """
 from __future__ import annotations
 
