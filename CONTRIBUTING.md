@@ -122,7 +122,12 @@ lesson §2.2): local verification is faster and more reliable for
 a small team. CI is the catch-net for things you forgot to run
 locally, not the primary gate.
 
-> **Note:** pre-commit hooks for ruff and the doc-drift check are
+> **CI runs manual-only** as of OPS-45. The workflow file
+> (`.github/workflows/ci.yml`) uses `workflow_dispatch:` so it
+> only runs when triggered from the GitHub UI. This keeps GitHub
+> Actions cost down — local `pytest tests/ -q` is what matters.
+>
+> **Pre-commit hooks** for ruff and the doc-drift check are
 > *planned* (#9) but not yet wired in. Until they are, "ran
 > ruff/pytest locally" is enforced by convention, not tooling.
 

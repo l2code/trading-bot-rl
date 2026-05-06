@@ -29,6 +29,45 @@ codifies the rule.
 
 ---
 
+## 2026-05-06 — OPS: CI switched to workflow_dispatch only (manual-only)
+
+**Issue:** [#45](https://github.com/l2code/trading-bot-rl/issues/45)
+**PR:** (this PR)
+
+Operator request: stop CI from auto-running on push/PR. The workflow
+ran across 3 Python versions per push, costing GitHub Actions
+minutes on every commit including doc-only changes. Local
+verification is the merge gate per CONTRIBUTING.md §6 anyway, so
+the auto-trigger was duplicative. CI remains available as a
+catch-net the operator can run manually from the UI.
+
+## 2026-05-06 — FIX: P1 walk-forward warmup; first ~200 test days no longer use degraded features
+
+**Issue:** [#24](https://github.com/l2code/trading-bot-rl/issues/24)
+**PR:** [#44](https://github.com/l2code/trading-bot-rl/pull/44)
+
+Third P1 simulator/eval fix. Both `walk_forward.py` and
+`trainer._build_env` now load bars with 1.5 trading years of
+warmup before the requested window. Long-lookback features (sma_200,
+return_60d, atr_pct_14, etc.) populate before the in-window region
+and frames are filtered to the eval window before candidate
+generation. Three new unit tests in
+`tests/unit/test_warmup_helpers.py`. One P1 (#36 portfolio
+equity-curve eval) and one P2 (#26 hindsight skip-CF) remain
+before v1/v2 re-runs can replace the PROVISIONAL diary entries.
+
+## 2026-05-06 — FIX: P1 round-trip cost charged 2x per-side (fixed)
+
+**Issue:** [#23](https://github.com/l2code/trading-bot-rl/issues/23)
+**PR:** [#43](https://github.com/l2code/trading-bot-rl/pull/43)
+
+Second P1 simulator fix. `cost_model.cost_bps()` documented as
+per-side; simulator was subtracting once. Now multiplies by 2 for
+round-trip explicitly. Combined with FIX-22 (size scaling), a 10%
+sized trade with 50bps per-side cost on a flat asset now correctly
+produces -10bps portfolio drag (was -5bps before FIX-23, was -50bps
+before FIX-22+23).
+
 ## 2026-05-06 — OPS: roadmap restructured around operator's "Next Stage" framework
 
 **Issues filed:** [#36](https://github.com/l2code/trading-bot-rl/issues/36) (P1 portfolio equity-curve eval), [#37](https://github.com/l2code/trading-bot-rl/issues/37) (promotion matrix), [#38](https://github.com/l2code/trading-bot-rl/issues/38) (baseline-dominance gate), [#39](https://github.com/l2code/trading-bot-rl/issues/39) (ablation harness), [#40](https://github.com/l2code/trading-bot-rl/issues/40) (shadow mode), and earlier #29–#35 from the RL-design review.
