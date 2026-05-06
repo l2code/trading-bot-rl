@@ -125,12 +125,14 @@ class ExecutionSimulator:
             exit_price = last_close
 
         asset_return = (exit_price - entry_price) / entry_price
-        # Portfolio contribution = sized asset return, net of cost.
-        # cost_bps is a per-portfolio bps charge (i.e. it's already
-        # scaled to the notional that was put on; see #23 for the
-        # round-trip-vs-per-side debate which is a separate concern).
-        cost_drag = cost_bps / 10_000.0
-        net_return = float(size_pct) * asset_return - cost_drag * float(size_pct)
+        # Portfolio contribution = sized asset return, net of round-
+        # trip cost. ``cost_bps`` is **per-side** per the cost_model's
+        # docstring contract (spread + slippage + market_impact +
+        # adverse_selection, each measured per fill). A round-trip
+        # involves two fills (entry + exit), so we charge 2× per-side.
+        # See FIX-23 for the discussion that resolved this convention.
+        cost_drag_round_trip = 2.0 * cost_bps / 10_000.0
+        net_return = float(size_pct) * (asset_return - cost_drag_round_trip)
         holding_days = max(1, (exit_ts - entry_bar.timestamp).days or 1)
 
         return TradeOutcome(

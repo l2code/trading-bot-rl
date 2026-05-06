@@ -310,6 +310,39 @@ def test_execution_simulator_cost_reduces_return():
     assert with_cost.return_pct < no_cost.return_pct
 
 
+def test_execution_simulator_charges_round_trip_cost():
+    """FIX-23: cost_bps is per-side per cost_model's docstring; a
+    round-trip trade must charge 2× per-side.
+
+    With size_pct=1.0 and a flat trade (zero asset move), a 50-bps
+    per-side cost should produce return_pct ≈ -0.01 (100bps round-
+    trip × 100% size). Prior to FIX-23 the simulator subtracted 50
+    bps once → return_pct = -0.005, half the real impact.
+    """
+    from datetime import timedelta
+    # Zero-move bars (open == close == flat throughout the holding period).
+    bars = []
+    p = 100.0
+    for i in range(10):
+        bars.append(MarketBar(
+            symbol="X", timestamp=datetime(2024, 1, 1) + timedelta(days=i),
+            timeframe="1d", open=p, high=p, low=p,
+            close=p, volume=1e6, adjusted_close=p, source="t",
+        ))
+    sim = ExecutionSimulator(atr_target_mult=100.0, atr_stop_mult=100.0)
+    out = sim.simulate(
+        bars=bars, entry_index=0, size_pct=1.0,
+        max_holding_days=5, cost_bps=50, atr_pct=0.001,
+    )
+    assert out is not None
+    # Asset move is zero; portfolio impact is -100 bps round-trip on
+    # 100% size = -0.01.
+    assert abs(out.return_pct - (-0.01)) < 1e-9
+    # Asset return remains zero — round-trip charge doesn't touch
+    # the underlying asset's percent return.
+    assert abs(out.asset_return_pct) < 1e-12
+
+
 def test_execution_simulator_return_scales_with_size_pct():
     """FIX-22: size_pct must scale realized portfolio return.
 
