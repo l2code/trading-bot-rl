@@ -43,6 +43,8 @@ rl-swing = "rl_swing.runtime.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["rl_swing*"]
+namespaces = false
 
 [tool.setuptools.package-data]
 rl_swing = ["py.typed"]
