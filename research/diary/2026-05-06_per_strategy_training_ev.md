@@ -1,7 +1,22 @@
 # RESEARCH-15 — per-strategy training-window EV analysis
 
+> **PROVISIONAL** as of 2026-05-06 evening. The script reuses the
+> production simulator and cost model, both of which have P1 bugs
+> identified by code review after this analysis ran:
+> [#22](https://github.com/l2code/trading-bot-rl/issues/22) (asset
+> return not scaled by size_pct — affects all per-strategy mean
+> returns since size differs across strategies: momentum 0.10,
+> rsi/breakout 0.07) and
+> [#23](https://github.com/l2code/trading-bot-rl/issues/23) (round-
+> trip cost charged once). The qualitative ranking
+> (momentum > breakout > rsi by mean risk-adjusted EV) MAY survive
+> the fix because all three strategies use the same simulator and
+> the bug affects them similarly, but the absolute EV numbers and
+> the percent gap between Momentum and Breakout are not trustworthy
+> until #22 and #23 land.
+
 **Date:** 2026-05-06
-**Verdict:** **PARTIAL H2** (Momentum-preference is rationally
+**Verdict:** **PARTIAL H2** (provisional) (Momentum-preference is rationally
 motivated on training data, but agent's specialization to
 *only* Momentum is irrational — leaves 8,411 positive-EV Breakout
 candidates on the table).

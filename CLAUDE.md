@@ -52,8 +52,18 @@ For findings, run results, RFC outcomes, and decisions, see
 
 | Variant | Tier | Verdict | Latest |
 |---------|------|---------|--------|
-| `filter_v001` (loose) | exploratory (yfinance) | **NO_GO** | 2026-05-06 |
-| `selector_v002` | exploratory (yfinance) | **NO_GO** | 2026-05-06 |
+| `filter_v001` (loose) | exploratory (yfinance) | **NO_GO (provisional)** | 2026-05-06 |
+| `selector_v002` | exploratory (yfinance) | **NO_GO (provisional)** | 2026-05-06 |
+
+> **All current verdicts are PROVISIONAL** pending three P1
+> simulator/evaluation fixes ([#22](https://github.com/l2code/trading-bot-rl/issues/22)
+> position-size doesn't scale return,
+> [#23](https://github.com/l2code/trading-bot-rl/issues/23) round-
+> trip cost charged once,
+> [#24](https://github.com/l2code/trading-bot-rl/issues/24) walk-
+> forward warmup missing) identified by code review. **Do not run
+> further training experiments (including Optuna sweep #8) until
+> these land** — would burn compute on a broken simulator.
 
 Diary entries linked from `docs/scorecard.md`. Narrative findings
 live in `research/CHANGELOG.md` and the per-entry diary files —

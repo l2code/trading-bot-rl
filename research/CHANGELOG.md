@@ -29,6 +29,47 @@ codifies the rule.
 
 ---
 
+## 2026-05-06 — STRUCTURAL: 5 simulator/evaluation bugs identified by code review; current verdicts marked PROVISIONAL
+
+**Issues filed:** [#22](https://github.com/l2code/trading-bot-rl/issues/22) (P1 size-scale), [#23](https://github.com/l2code/trading-bot-rl/issues/23) (P1 round-trip cost), [#24](https://github.com/l2code/trading-bot-rl/issues/24) (P1 WF warmup), [#25](https://github.com/l2code/trading-bot-rl/issues/25) (P2 selector runtime), [#26](https://github.com/l2code/trading-bot-rl/issues/26) (P2 hindsight skip-CF)
+
+Operator code review after the v002 NO_GO and per-strategy EV diary
+landed identified five real issues affecting both the simulator
+(`return_pct` not scaled by `size_pct`; round-trip cost charged
+once despite per-side docstring) and walk-forward evaluation
+(no lookback warmup, so first ~200 days of test window run on
+degraded long-lookback features). Two additional v2-specific
+issues: selector_v002 not wired into the runtime DecisionPipeline,
+and the skip-reward counterfactual uses hindsight-best (max-over-
+noise bias). All three current diary entries (v001 NO_GO, v002
+NO_GO, per-strategy EV) marked PROVISIONAL pending the P1 fixes.
+Optuna sweep (#8) paused — running on a broken simulator would
+burn compute. Sequence: P1 fixes (#22/#23/#24) → re-run v1 and v2
+with corrected metrics → then resume #8 with confidence the gate
+output is meaningful.
+
+## 2026-05-06 — OPS: separate rolling findings (CHANGELOG.md) from CLAUDE.md operating brief
+
+**Issue:** [#19](https://github.com/l2code/trading-bot-rl/issues/19)
+**PR:** [#20](https://github.com/l2code/trading-bot-rl/pull/20)
+
+CLAUDE.md was bloating with per-experiment narrative. Split: CLAUDE.md
+stays a stable operating brief (variant-status table, rules,
+debts); this CHANGELOG.md absorbs chronological findings; per-
+experiment artifacts stay under `research/diary/`. CONTRIBUTING.md
+§11 now codifies the rule (append to changelog on merge).
+
+## 2026-05-06 — FEAT: hyperparam-override CLI plumbing for kaggle sweeps
+
+**Issue:** [#28](https://github.com/l2code/trading-bot-rl/issues/28) (closed)
+**PR:** [#21](https://github.com/l2code/trading-bot-rl/pull/21)
+
+`scripts/kaggle_run.py` now accepts `--hyperparam-overrides='{...}'`
+which propagates via env var into `kaggle_train.py` and finally
+into `train_from_experiment(hyperparam_overrides=)`. Override dict
+merges over `cfg.hyperparams` (override wins). Prerequisite for
+the Optuna entropy sweep (#8) — but blocked by P1 simulator fixes.
+
 ## 2026-05-06 — RESEARCH: per-strategy training-EV analysis (PARTIAL-H2)
 
 **Issue:** [#15](https://github.com/l2code/trading-bot-rl/issues/15)
