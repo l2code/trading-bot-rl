@@ -142,9 +142,34 @@ Before claiming "done":
 2. `ruff check src/ tests/` is clean.
 3. PR body lists what was run, with counts.
 
-Pre-commit hooks enforce ruff. The 85% coverage floor enforces
-test discipline. CI is configured but does not gate merges (per
-the trading-bot2 lesson).
+The 85% coverage floor enforces test discipline. Pre-commit hooks
+enforcing ruff + doc-drift are *planned* (#9) but not yet wired —
+until they are, the discipline is by-convention. CI is configured
+but does not gate merges (per the trading-bot2 lesson §2.2).
+
+### 3.7 Critical self-review pass before merge
+
+After local verification (§3.6) passes and the PR is open, run a
+deliberate critical pass of your own diff before merging. Treat it
+like a stern reviewer's read of the code. **Capture the review as
+a PR comment** so a future reader can audit what was checked.
+
+The full checklist lives in `CONTRIBUTING.md` §7. Highlights:
+
+- `ruff` clean on every touched file (not just new ones).
+- Test counts in CLAUDE.md / scorecard / README match the new total.
+- No claims about tooling that doesn't exist yet (no aspirational
+  pre-commit / CI / script statements).
+- PR body's `Closes #N` is *only* for issues whose AC is fully met.
+  Partial progress is `Refs #N` plus a follow-up issue filed
+  *before* merge.
+- Ambiguous design choices documented in code AND in a follow-up
+  issue.
+- No accidental `__pycache__` / per-run caches in the diff.
+
+PR #10's self-review caught 6 real issues that would otherwise have
+shipped uncaught. The cost of skipping the pass is real; the cost
+of running it is ~5 minutes. Always run it.
 
 ---
 
