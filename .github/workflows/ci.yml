@@ -1,10 +1,13 @@
 name: ci
 
+# Manual-only per OPS-45 — local verification is the merge gate
+# (CONTRIBUTING.md §6, SDLC_LESSONS_FOR_NEW_PROJECT.md §2.2). CI
+# kept as a catch-net the operator can run from the UI when
+# wanted. Avoid auto-running on every push/PR to keep GitHub
+# Actions cost down for a small team where local pytest+ruff is
+# faster and more reliable.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
   test:
