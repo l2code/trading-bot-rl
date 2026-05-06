@@ -79,9 +79,13 @@ def _materialize_kernel(
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Copy script and inject the env-var defaults at the top so this
-    # specific run is fully self-contained on Kaggle (no env vars need
-    # to be set in the kernel's settings).
+    # Copy script and inject the env-var defaults so this specific run
+    # is fully self-contained on Kaggle (no env vars need to be set in
+    # the kernel's settings).
+    #
+    # IMPORTANT: ``from __future__ import ...`` MUST be the first
+    # statement in a Python file, so we have to inject AFTER any future
+    # imports rather than at the very top.
     src = SCRIPT_FILE.read_text(encoding="utf-8")
     overrides_block = (
         "# --- injected by scripts/kaggle_run.py ---\n"
@@ -94,10 +98,43 @@ def _materialize_kernel(
         overrides_block += f"_os.environ.setdefault('RL_SWING_TOTAL_TIMESTEPS', {str(total_timesteps)!r})\n"
     if seeds:
         overrides_block += f"_os.environ.setdefault('RL_SWING_SEEDS', {','.join(map(str, seeds))!r})\n"
-    overrides_block += "# --- end injection ---\n\n"
+    overrides_block += "# --- end injection ---\n"
 
+    # Find the spot to insert: after the last consecutive ``from __future__``
+    # statement (and any preceding module docstring / comments / blanks).
+    lines = src.splitlines(keepends=True)
+    insert_at = 0
+    in_docstring = False
+    docstring_quote = ""
+    last_future = -1
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if in_docstring:
+            if stripped.endswith(docstring_quote):
+                in_docstring = False
+            continue
+        if not stripped:
+            continue
+        if stripped.startswith("#"):
+            continue
+        if (stripped.startswith('"""') or stripped.startswith("'''")):
+            quote = stripped[:3]
+            # One-line or multi-line module docstring
+            if stripped.count(quote) >= 2 and len(stripped) > 3:
+                continue
+            in_docstring = True
+            docstring_quote = quote
+            continue
+        if stripped.startswith("from __future__"):
+            last_future = i
+            continue
+        # First non-future, non-comment, non-docstring line: stop scanning.
+        break
+    insert_at = last_future + 1 if last_future >= 0 else 0
+
+    new_src = "".join(lines[:insert_at]) + "\n" + overrides_block + "\n" + "".join(lines[insert_at:])
     out_script = out_dir / "kaggle_train.py"
-    out_script.write_text(overrides_block + src, encoding="utf-8")
+    out_script.write_text(new_src, encoding="utf-8")
 
     # Build kernel-metadata.json from the template.
     meta = TEMPLATE_META.read_text(encoding="utf-8")
