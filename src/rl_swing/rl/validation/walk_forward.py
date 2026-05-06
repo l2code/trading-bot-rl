@@ -193,6 +193,7 @@ def validate_from_experiment(
     model_id: str | None = None,
     report_dir: Path | None = None,
     data_provider_override: str | None = None,
+    artifact_root_override: str | Path | None = None,
     include_baselines: tuple[str, ...] = (
         "random", "always_take_100", "always_take_50", "never_take",
     ),
@@ -246,8 +247,15 @@ def validate_from_experiment(
     if "never_take" in include_baselines:
         scorers.append(NeverTakePolicyScorer(model_id="baseline_never_take"))
 
-    # Trained model (best.zip from the experiment)
-    artifact_root = Path(exp.get("artifact_root", "data/models/")) / exp["name"]
+    # Trained model. Resolution order:
+    #   1. caller-supplied ``artifact_root_override`` (Kaggle/Colab pass
+    #      this in, since they write to /kaggle/working/artifacts).
+    #   2. experiment YAML's ``artifact_root``.
+    #   3. ``data/models/`` (local dev default).
+    if artifact_root_override is not None:
+        artifact_root = Path(artifact_root_override) / exp["name"]
+    else:
+        artifact_root = Path(exp.get("artifact_root", "data/models/")) / exp["name"]
     model_artifact = artifact_root / "model.zip"
     rl_added = False
     if model_artifact.exists():

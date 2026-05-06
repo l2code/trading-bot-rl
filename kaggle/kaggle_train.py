@@ -158,6 +158,7 @@ try:
     val_summary = validate_from_experiment(
         EXPERIMENT,
         report_dir=report_dir,
+        artifact_root_override=str(ARTIFACTS),
         include_cost_stress=True,
     )
     with open(WORKING / "validation_summary.json", "wt", encoding="utf-8") as f:

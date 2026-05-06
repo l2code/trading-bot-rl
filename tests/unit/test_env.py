@@ -339,9 +339,18 @@ def test_reward_skip_with_no_counterfactual_is_zero():
     assert rm.reward_for_skip(None) == 0.0
 
 
-def test_reward_skip_winner_penalized_loser_rewarded():
+def test_reward_skip_mirrors_take_on_risk_adjusted_scale():
+    """Skip rewards mirror take rewards on the same risk-adjusted scale.
+
+    Skipping a +10% winner with target_risk_pct=2% costs you +5
+    (clipped at reward_clip=5). Skipping a -10% loser earns you +5.
+    This makes the agent's choice between skip and take a real
+    decision rather than a degenerate "always take" optimum.
+    """
     from rl_swing.rl.env.execution_simulator import TradeOutcome
-    rm = RewardModel(skip_winner_penalty=0.10, skip_loser_reward=0.05)
+    # Use scale=1.0 to test the mirror itself; default is 0.5.
+    rm = RewardModel(target_risk_pct=0.02, reward_clip=5.0,
+                     skip_counterfactual_scale=1.0)
     winner = TradeOutcome(
         symbol="X", entry_timestamp=datetime(2024, 1, 1),
         exit_timestamp=datetime(2024, 1, 2), entry_price=100, exit_price=110,
@@ -354,8 +363,28 @@ def test_reward_skip_winner_penalized_loser_rewarded():
         qty=10, notional=1000, return_pct=-0.10, raw_return_pct=-0.10,
         holding_days=1, peak_drawdown_pct=0.10, exit_reason="stop", cost_bps=0,
     )
-    assert rm.reward_for_skip(winner) == -0.10
-    assert rm.reward_for_skip(loser) == 0.05
+    # +10% / 2% = +5 risk-adjusted; clipped at 5; skip mirrors → -5.
+    assert rm.reward_for_skip(winner) == -5.0
+    # -10% / 2% = -5 risk-adjusted; clipped at -5; skip mirrors → +5.
+    assert rm.reward_for_skip(loser) == 5.0
+
+
+def test_reward_skip_scale_dampens_mirror():
+    """skip_counterfactual_scale lets you tune skip-vs-take
+    aggressiveness.  scale=0.5 means missing a winner is half as bad
+    as taking it is good → the agent leans slightly toward action
+    when EV is near zero."""
+    from rl_swing.rl.env.execution_simulator import TradeOutcome
+    rm = RewardModel(target_risk_pct=0.02, reward_clip=5.0,
+                     skip_counterfactual_scale=0.5)
+    small_winner = TradeOutcome(
+        symbol="X", entry_timestamp=datetime(2024, 1, 1),
+        exit_timestamp=datetime(2024, 1, 2), entry_price=100, exit_price=101,
+        qty=10, notional=1000, return_pct=0.01, raw_return_pct=0.01,
+        holding_days=1, peak_drawdown_pct=0.0, exit_reason="target", cost_bps=0,
+    )
+    # +1% / 2% = +0.5; mirrored × 0.5 = -0.25.
+    assert abs(rm.reward_for_skip(small_winner) - (-0.25)) < 1e-9
 
 
 # --- env -----------------------------------------------------------------
