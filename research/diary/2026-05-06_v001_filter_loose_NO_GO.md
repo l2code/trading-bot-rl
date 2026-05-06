@@ -1,19 +1,15 @@
 # RESEARCH-001 — v001 filter (loose candidate config) on yfinance starter_equities
 
-> **PROVISIONAL** as of 2026-05-06 evening. Three P1 simulator/
-> evaluation bugs were identified by code review after this verdict
-> was recorded ([#22](https://github.com/l2code/trading-bot-rl/issues/22)
-> position-size doesn't scale return,
-> [#23](https://github.com/l2code/trading-bot-rl/issues/23) round-trip
-> costs subtracted once,
-> [#24](https://github.com/l2code/trading-bot-rl/issues/24) walk-
-> forward lacks lookback warmup). Quantitative metrics in this entry
-> are NOT trustworthy until those land and the run is repeated.
-> Qualitative conclusion ("trained model is statistically identical
-> to baseline_always_take_100") may survive but is not confirmed.
+> **SUPERSEDED** as of 2026-05-06. Phase 0 simulator/eval fixes
+> (#22 #23 #24 #36 + the FIX-AUDIT-BUNDLE/V2/V3 cascade) are merged
+> and v1 was re-run. The post-Phase-0 FINAL_NO_GO diary is at
+> `2026-05-06_v001_filter_post_phase0_FINAL_NO_GO.md` and supersedes
+> this entry. Qualitative conclusion ("trained PPO is bit-identical
+> to `baseline_always_take_100`") **survived** the rebuild — the
+> material-DD regression on the Phase-24 gate is unchanged.
 
 **Date:** 2026-05-06
-**Verdict:** **NO_GO** (provisional)
+**Verdict:** **NO_GO** (superseded — see `…_post_phase0_FINAL_NO_GO.md`)
 **Issue:** [#2](https://github.com/l2code/trading-bot-rl/issues/2)
 **Variant:** `filter_v001`
 **Run:** Kaggle `crazypenguin/rl-swing-v001-500k-3seeds-loose`

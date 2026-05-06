@@ -29,11 +29,38 @@ codifies the rule.
 
 ---
 
+## 2026-05-06 (late evening) — RESEARCH: Phase 0 FINAL closure — DRAFT diaries promoted to FINAL_NO_GO
+
+**Issues:** [#2](https://github.com/l2code/trading-bot-rl/issues/2), [#3](https://github.com/l2code/trading-bot-rl/issues/3)
+**Runs:** `crazypenguin/rl-swing-v001-rerun-audit-v2`, `…-v001-phase0-final`, `…-v002-rerun-audit-v2` (all complete; v002-phase0-final-retry never pushed due to Kaggle 5-session quota — audit-v2 carries the same FIX-AUDIT-V2/V3 patch set and is the canonical v2 final)
+**Diaries:** [`2026-05-06_v001_filter_post_phase0_FINAL_NO_GO.md`](diary/2026-05-06_v001_filter_post_phase0_FINAL_NO_GO.md), [`2026-05-06_v002_selector_post_phase0_FINAL_NO_GO.md`](diary/2026-05-06_v002_selector_post_phase0_FINAL_NO_GO.md)
+
+Pulled the audit-v2 / phase0-final validation summaries and
+confirmed the qualitative verdict from the DRAFT entries holds
+under the refined daily-P&L metrics (FIX-#36 idle-day window from
+test_start/end, FIX-#57 trading-day calendar from bars). v1
+trained PPO is bit-identical to `baseline_always_take_100` (score
+0.6910, return +4.5134, sharpe +7.351, dd 0.1975); strongest
+baseline `baseline_random` scores 0.7352 with dd 0.0904 — the
+trained model fails the Phase-24 gate by a +0.107 max-drawdown
+material regression. v2 trained PPO is bit-identical to
+`selector_baseline_always_skip` ([0,0,0] per-strategy takes,
+score 0.3250 across all 30 evaluation points); strongest baseline
+`selector_baseline_random` scores 0.7186 — three material gate
+regressions (return, sharpe, profit_factor). Both DRAFT diaries
+renamed to `…_FINAL_NO_GO.md` with refined numbers and updated
+banners; pre-Phase-0 predecessor PROVISIONAL banners replaced
+with SUPERSEDED banners; CLAUDE.md §2 status table and
+docs/scorecard.md research-state table updated to FINAL_NO_GO.
+**Phase 0 is now fully closed.** Phase 1 leads with #29
+MaskablePPO for v2, #30 supervised ranker baseline, #8 Optuna
+sweep. No more compute on default-PPO v1/v2.
+
 ## 2026-05-06 (evening) — RESEARCH: Phase 0 closure DRAFT — both variants NO_GO under default PPO hyperparams
 
 **Issues:** [#2](https://github.com/l2code/trading-bot-rl/issues/2), [#3](https://github.com/l2code/trading-bot-rl/issues/3)
 **PRs:** all FIX-#22 through #62 merged
-**Diaries:** [`2026-05-06_v001_filter_post_phase0_DRAFT_NO_GO.md`](diary/2026-05-06_v001_filter_post_phase0_DRAFT_NO_GO.md), [`2026-05-06_v002_selector_post_phase0_DRAFT_NO_GO.md`](diary/2026-05-06_v002_selector_post_phase0_DRAFT_NO_GO.md)
+**Diaries:** the DRAFT entries linked here have been renamed to `…_FINAL_NO_GO.md` (see entry above)
 
 After all 16 P1+P2 simulator/evaluation fixes from two operator
 audits + one parallel pass were merged, both v1 and v2 were

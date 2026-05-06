@@ -1,20 +1,21 @@
 # RESEARCH-003b — v002 selector on yfinance starter_equities (post-Phase-0)
 
-> **DRAFT_NO_GO** as of 2026-05-06 evening. Phase 0 simulator/eval
-> fixes are merged. Audit-bundle re-run completed; audit-v2 and
-> phase0-final still in flight. Numbers below are from the audit-
-> bundle run; refinements (#56 idle-day window, #57 trading-day
-> calendar) will shift these slightly but the qualitative verdict
-> is stable. This entry promotes from DRAFT to FINAL once those
-> runs land.
+> **FINAL_NO_GO** as of 2026-05-06. Phase 0 simulator/eval fixes
+> are merged. Audit-bundle and audit-v2 re-runs completed on
+> Kaggle (the v002-phase0-final-retry never pushed because Kaggle
+> hit the 5-concurrent-session quota; audit-v2 contains the same
+> FIX-AUDIT-V2 + V3 patch set, so it is the canonical final run for
+> v2). Numbers below are from audit-v2. The qualitative verdict —
+> bit-identical convergence to `selector_baseline_always_skip` and
+> a 3-metric material regression on the Phase-24 gate — is
+> unchanged from the audit-bundle DRAFT.
 
 **Date:** 2026-05-06
-**Verdict:** **NO_GO** (draft — qualitative verdict stable; numbers pending final runs)
-**Issue:** [#3](https://github.com/l2code/trading-bot-rl/issues/3) (PROVISIONAL banner from previous entry will be lifted by FINAL)
+**Verdict:** **NO_GO** (final)
+**Issue:** [#3](https://github.com/l2code/trading-bot-rl/issues/3) (PROVISIONAL banner on the predecessor entry is lifted by this FINAL)
 **Variant:** `selector_v002`
-**Run (audit-bundle):** Kaggle `crazypenguin/rl-swing-v002-rerun-audit-bundle`
-**Trainer commit at run time:** `eb32fba` (FIX-AUDIT-BUNDLE).
-**Final-state metrics will use:** `crazypenguin/rl-swing-v002-rerun-audit-v2` or `…-phase0-final` once they complete.
+**Run (canonical):** Kaggle `crazypenguin/rl-swing-v002-rerun-audit-v2`
+**Trainer commits:** `eb32fba` (FIX-AUDIT-BUNDLE) at the bundle stage; the audit-v2 run rolls in FIX-AUDIT-V2 (#56–#59) and FIX-AUDIT-V3 (#61, #62) on top.
 
 ---
 
@@ -47,31 +48,33 @@ Same set as v1 plus the v2-specific:
 - **Reward params:** identical to v1 (turnover 0.05, holding 0.02,
   dd 0.10, skip mirror 1.0).
 
-## Headline metrics — audit-bundle
+## Headline metrics — audit-v2
 
-Test window 2022-01-01..2022-12-31. Selector baselines + trained:
+Test window 2022-01-01..2022-12-31, daily-P&L basis (FIX-#36),
+trading-day spread = 260 (FIX-#57). Selector baselines + trained:
 
 | model_id                                  | score   | n_trades | take_rate | total_return | sharpe | max_DD | per_strat |
 |-------------------------------------------|--------:|---------:|----------:|-------------:|-------:|-------:|-----------|
-| `selector_baseline_random` (strongest)    | 0.7177  | 1241     | 0.694     | +2.18        | +6.60  | 0.159  | [839, 69, 333] |
+| `selector_baseline_random` (strongest)    | 0.7186  | 1241     | 0.6941    | +2.1697      | +7.108 | 0.1557 | [839, 69, 333] |
 | `selector_baseline_always_skip`           | 0.3250  | 0        | 0         | 0            | 0      | 0      | [0, 0, 0] |
 | **`ppo_selector_v002` (trained)**         | **0.3250** | **0** | **0** | **0** | **0** | **0** | **[0, 0, 0]** |
 
 The trained PPO is **bit-identical to `selector_baseline_always_skip`**
 across all 30 evaluation points (3 seeds × 10 checkpoints) — n_trades=0,
-score=0.3250, no per-strategy takes anywhere.
+score=0.3250, no per-strategy takes anywhere. Cost-2× columns confirm
+the equivalence holds under cost stress as well.
 
 ## Gate output
 
-vs **strongest baseline (`selector_baseline_random`, score 0.7177)**:
+vs **strongest baseline (`selector_baseline_random`, score 0.7186)**:
 
-| Metric              | Trained | Baseline | Δ      | Status |
-|---------------------|--------:|---------:|-------:|--------|
-| total_return        | 0       | +2.18    | -2.18  | **✗ MATERIAL regression** |
-| annualized_sharpe   | 0       | +6.60    | -6.60  | **✗ MATERIAL regression** |
-| profit_factor       | n/a     | high     | -     | **✗ MATERIAL regression** |
-| max_drawdown        | 0       | 0.159    | -0.159 | informational (skipping = no DD) |
-| turnover_take_rate  | 0       | 0.694    | -0.694 | informational |
+| Metric              | Trained | Baseline | Δ       | Status |
+|---------------------|--------:|---------:|--------:|--------|
+| total_return        | 0       | +2.1697  | -2.1697 | **✗ MATERIAL regression** |
+| annualized_sharpe   | 0       | +7.108   | -7.108  | **✗ MATERIAL regression** |
+| profit_factor       | 1.0     | 3.188    | -2.188  | **✗ MATERIAL regression** |
+| max_drawdown        | 0       | 0.1557   | -0.1557 | informational (skipping = no DD) |
+| turnover_take_rate  | 0       | 0.6941   | -0.6941 | informational |
 
 NO_GO by 3+ material regressions.
 
@@ -142,7 +145,7 @@ operator (chat 2026-05-06) and confirmed by this run:
 
 ## Cross-references
 
-- Predecessor (PROVISIONAL): `2026-05-06_v002_selector_NO_GO.md`
-- Sibling: `2026-05-06_v001_filter_post_phase0_DRAFT_NO_GO.md`
+- Predecessor (PROVISIONAL, banner lifted by this FINAL): `2026-05-06_v002_selector_NO_GO.md`
+- Sibling: `2026-05-06_v001_filter_post_phase0_FINAL_NO_GO.md`
 - Roadmap: CLAUDE.md §4 — Phase 1 leads with #29.
 - Operator audit chats: 2026-05-06 (Phase 0 fixes + Next Stage framing).

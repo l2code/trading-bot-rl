@@ -10,7 +10,7 @@ Last update: 2026-05-06 after applying SDLC lessons (issue #1).
 - **Pluggable variant architecture.** `TrainingVariant` + component
   registry means new variants are one new file plus one registry
   entry. v1 (filter) and v2 (selector) live side by side cleanly.
-- **Test discipline.** 242 tests today. Coverage floor 85%. Every
+- **Test discipline.** 267 tests today. Coverage floor 85%. Every
   variant ships with its own test module.
 - **Pure-function reward + cost models.** `RewardModel` and
   `EquityExecutionModel` are stateless dataclasses; they run
@@ -55,16 +55,21 @@ Last update: 2026-05-06 after applying SDLC lessons (issue #1).
 
 | Variant | Tier | Verdict | Diary |
 |---------|------|---------|-------|
-| `filter_v001` (loose) | exploratory (yfinance) | **NO_GO (provisional, superseded)** | [`2026-05-06_v001_filter_loose_NO_GO.md`](../research/diary/2026-05-06_v001_filter_loose_NO_GO.md) |
-| `selector_v002` (pre-Phase-0) | exploratory (yfinance) | **NO_GO (provisional, superseded)** | [`2026-05-06_v002_selector_NO_GO.md`](../research/diary/2026-05-06_v002_selector_NO_GO.md) |
-| per-strategy training-EV analysis | exploratory (yfinance) | partial-H2 (provisional) | [`2026-05-06_per_strategy_training_ev.md`](../research/diary/2026-05-06_per_strategy_training_ev.md) |
-| `filter_v001` (post-Phase-0) | exploratory (yfinance) | **DRAFT_NO_GO** | [`2026-05-06_v001_filter_post_phase0_DRAFT_NO_GO.md`](../research/diary/2026-05-06_v001_filter_post_phase0_DRAFT_NO_GO.md) |
-| `selector_v002` (post-Phase-0) | exploratory (yfinance) | **DRAFT_NO_GO** | [`2026-05-06_v002_selector_post_phase0_DRAFT_NO_GO.md`](../research/diary/2026-05-06_v002_selector_post_phase0_DRAFT_NO_GO.md) |
+| `filter_v001` (loose) | exploratory (yfinance) | **NO_GO (superseded by post-Phase-0)** | [`2026-05-06_v001_filter_loose_NO_GO.md`](../research/diary/2026-05-06_v001_filter_loose_NO_GO.md) |
+| `selector_v002` (pre-Phase-0) | exploratory (yfinance) | **NO_GO (superseded by post-Phase-0)** | [`2026-05-06_v002_selector_NO_GO.md`](../research/diary/2026-05-06_v002_selector_NO_GO.md) |
+| per-strategy training-EV analysis | exploratory (yfinance) | partial-H2 (numbers superseded; ranking stands) | [`2026-05-06_per_strategy_training_ev.md`](../research/diary/2026-05-06_per_strategy_training_ev.md) |
+| `filter_v001` (post-Phase-0) | exploratory (yfinance) | **FINAL_NO_GO** | [`2026-05-06_v001_filter_post_phase0_FINAL_NO_GO.md`](../research/diary/2026-05-06_v001_filter_post_phase0_FINAL_NO_GO.md) |
+| `selector_v002` (post-Phase-0) | exploratory (yfinance) | **FINAL_NO_GO** | [`2026-05-06_v002_selector_post_phase0_FINAL_NO_GO.md`](../research/diary/2026-05-06_v002_selector_post_phase0_FINAL_NO_GO.md) |
 
-> Phase 0 closed; pre-Phase-0 entries superseded. Post-Phase-0
-> entries are DRAFT_NO_GO with audit-bundle metrics. Audit-v2 and
-> phase0-final runs in flight; will replace numbers in place
-> (qualitative verdict won't change) and promote to FINAL.
+> **Phase 0 fully closed.** Both post-Phase-0 entries are
+> `FINAL_NO_GO` with audit-v2 / phase0-final metrics (daily-P&L
+> basis, FIX-#36; 260 trading days). Pre-Phase-0 entries are
+> retained as historical record with `SUPERSEDED` banners. v1
+> trained PPO is bit-identical to `baseline_always_take_100`
+> (material-DD regression caps verdict). v2 trained PPO is
+> bit-identical to `selector_baseline_always_skip` (3-metric
+> material regression). Phase 1 leads with #29 MaskablePPO for v2
+> and #30 supervised ranker baseline.
 
 ## Roadmap progress
 

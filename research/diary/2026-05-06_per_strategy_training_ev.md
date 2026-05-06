@@ -1,19 +1,22 @@
 # RESEARCH-15 — per-strategy training-window EV analysis
 
-> **PROVISIONAL** as of 2026-05-06 evening. The script reuses the
-> production simulator and cost model, both of which have P1 bugs
-> identified by code review after this analysis ran:
+> **PROVISIONAL (numbers superseded; ranking stands)** as of
+> 2026-05-06. The script reused the production simulator and cost
+> model, both of which carried P1 bugs at the time of the run:
 > [#22](https://github.com/l2code/trading-bot-rl/issues/22) (asset
-> return not scaled by size_pct — affects all per-strategy mean
-> returns since size differs across strategies: momentum 0.10,
-> rsi/breakout 0.07) and
+> return not scaled by size_pct) and
 > [#23](https://github.com/l2code/trading-bot-rl/issues/23) (round-
-> trip cost charged once). The qualitative ranking
-> (momentum > breakout > rsi by mean risk-adjusted EV) MAY survive
-> the fix because all three strategies use the same simulator and
-> the bug affects them similarly, but the absolute EV numbers and
-> the percent gap between Momentum and Breakout are not trustworthy
-> until #22 and #23 land.
+> trip cost charged once). Both fixes are now merged. The
+> **qualitative ranking** (momentum > breakout > rsi by mean
+> risk-adjusted EV) is unchanged in the post-Phase-0 v1/v2 re-runs
+> on the same 2014–2020 training window. The absolute EV numbers
+> in this entry are still on the old simulator and should not be
+> quoted as decision-grade; if a re-run of this script is needed
+> for Phase 1 work (e.g. supervised baseline #30), do it before
+> citing absolute numbers. The H1-vs-H2 conclusion (PARTIAL H2 —
+> rational Momentum preference, irrational Breakout exclusion)
+> survived the rebuild and motivates the masked-PPO direction in
+> Phase 1.
 
 **Date:** 2026-05-06
 **Verdict:** **PARTIAL H2** (provisional) (Momentum-preference is rationally
