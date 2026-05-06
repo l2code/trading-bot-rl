@@ -26,20 +26,11 @@ from rl_swing.domain import (
 )
 from rl_swing.features.pipelines import CoreDailyPipeline
 from rl_swing.ports import PolicyScorer
-from rl_swing.rl.agents.baseline_scorers import (
-    AlwaysTakePolicyScorer,
-    NeverTakePolicyScorer,
-    RandomPolicyScorer,
-)
 from rl_swing.rl.env.cost_model import EquityExecutionModel
 from rl_swing.rl.env.execution_simulator import ExecutionSimulator
 from rl_swing.rl.env.reward_model import RewardModel
 from rl_swing.rl.validation.baselines import buy_and_hold_return
 from rl_swing.rl.validation.metrics import validation_composite_score
-from rl_swing.strategies.aggregator import StrategyAggregator
-from rl_swing.strategies.breakout import BreakoutStrategy
-from rl_swing.strategies.mean_reversion import RsiMeanReversionStrategy
-from rl_swing.strategies.momentum import MomentumStrategy
 
 _log = logging.getLogger(__name__)
 
@@ -219,9 +210,22 @@ def validate_from_experiment(
 
     provider = _build_provider(provider_name)
     symbols = _load_universe(universe_name)
-    bars = list(provider.get_bars(symbols, test_start, test_end, "1d", True))
+    # FIX-24: load bars with warmup before test_start so long-lookback
+    # features (sma_200, return_60d, atr_pct_14, etc.) are populated
+    # on the first test day. Without warmup, ~200 of the 252 test
+    # trading days had degraded features and silently corrupted every
+    # diary's metrics.
+    from rl_swing.rl.training.trainer import (
+        _filter_frames_to_window,
+        _load_bars_with_warmup,
+    )
+    bars, _warmup_start = _load_bars_with_warmup(provider, symbols, test_start, test_end)
     pipeline = CoreDailyPipeline()
-    frames = list(pipeline.build(bars))
+    all_frames = list(pipeline.build(bars))
+    # Filter frames to the test window so candidates only fire in
+    # [test_start, test_end]. Bars stay full so the simulator can
+    # access prior-day context for ATR / stop calculations.
+    frames = _filter_frames_to_window(all_frames, test_start, test_end)
 
     cost_cfg = exp.get("cost_model") or {}
     cost_model = EquityExecutionModel(**cost_cfg) if cost_cfg else EquityExecutionModel()

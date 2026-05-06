@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import yaml
@@ -24,6 +24,33 @@ from rl_swing.adapters.data.synthetic_provider import SyntheticProvider
 from rl_swing.features.pipelines import CoreDailyPipeline
 from rl_swing.rl.env.cost_model import EquityExecutionModel
 from rl_swing.rl.env.reward_model import RewardModel
+
+# Calendar days of bars to load before the requested window so that
+# long-lookback features (sma_200, return_60d, atr_pct_14, etc.) are
+# fully populated on the FIRST in-window day. 1.5 trading years
+# covers the longest lookback (sma_200 = 200 trading days ≈ 280
+# calendar days) with margin for non-trading days. See FIX-24.
+_FEATURE_WARMUP_DAYS = int(252 * 1.5)
+
+
+def _load_bars_with_warmup(provider, symbols, start: date, end: date,
+                           warmup_days: int = _FEATURE_WARMUP_DAYS):
+    """Load bars from (start - warmup) to end so feature pipelines
+    can populate long-lookback fields before the in-window region.
+    Returns (bars, warmup_start)."""
+    warmup_start = start - timedelta(days=warmup_days)
+    bars = list(provider.get_bars(symbols, warmup_start, end, "1d", True))
+    return bars, warmup_start
+
+
+def _filter_frames_to_window(frames, start: date, end: date):
+    """Keep only frames whose ``as_of`` falls in [start, end]. Used
+    after building features over the extended window so candidates
+    only fire in the actual eval window."""
+    return [
+        f for f in frames
+        if start <= f.as_of.date() <= end
+    ]
 
 _log = logging.getLogger(__name__)
 
@@ -141,10 +168,19 @@ def _build_env(
 
     provider = _build_provider(provider_name)
     symbols = _load_universe_symbols(cfg.universe)
-    bars = list(provider.get_bars(symbols, start, end, "1d", True))
+    # FIX-24: load with warmup so long-lookback features (sma_200,
+    # return_60d, etc.) are populated on the first in-window day.
+    # Without this, the first ~200 days of every test window have
+    # degraded or missing features.
+    bars, _warmup_start = _load_bars_with_warmup(provider, symbols, start, end)
 
     pipeline = CoreDailyPipeline()
-    frames = list(pipeline.build(bars))
+    all_frames = list(pipeline.build(bars))
+    # Filter frames to the in-window region so candidates only fire
+    # in the actual eval period. Bars are kept full so the simulator
+    # can find entry indices and apply ATR-based exits with proper
+    # historical context.
+    frames = _filter_frames_to_window(all_frames, start, end)
 
     portfolio = PortfolioState(
         as_of=datetime(end.year, end.month, end.day),
