@@ -74,7 +74,13 @@ os.chdir(REPO_DIR)
 # directly. Kaggle's base image already has every runtime dep we need
 # (numpy, pandas, torch, sklearn, gymnasium, click, pyyaml, pyarrow,
 # yfinance), and we install stable-baselines3 below if it's missing.
-sys.path.insert(0, str(REPO_DIR / "src"))
+# Aggressively de-shadow any pre-existing rl_swing on this Kaggle
+# worker (could be from a previous kernel run, a stray pip cache, etc).
+# We want OUR src tree to be the authoritative source.
+SRC_DIR = str(REPO_DIR / "src")
+for k in [m for m in list(sys.modules) if m == "rl_swing" or m.startswith("rl_swing.")]:
+    del sys.modules[k]
+sys.path[:] = [SRC_DIR] + [p for p in sys.path if p != SRC_DIR]
 
 
 def _ensure(import_name: str, pip_name: str | None = None) -> None:
@@ -91,6 +97,16 @@ def _ensure(import_name: str, pip_name: str | None = None) -> None:
 
 _ensure("stable_baselines3")
 _ensure("gymnasium")
+
+# Diagnostic: prove which rl_swing tree Python is actually using.
+import importlib
+import rl_swing
+print(f"[kaggle_train] rl_swing.__file__ = {rl_swing.__file__}")
+print(f"[kaggle_train] rl_swing.__path__ = {list(rl_swing.__path__)}")
+import rl_swing.rl
+print(f"[kaggle_train] rl_swing.rl.__path__ = {list(rl_swing.rl.__path__)}")
+import rl_swing.rl.env
+print(f"[kaggle_train] rl_swing.rl.env OK at {rl_swing.rl.env.__file__}")
 
 
 # ----------------------------------------------------------------------
