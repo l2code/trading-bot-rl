@@ -1,0 +1,67 @@
+# PPO multi-strategy selector v002 experiment.
+#
+# Where v001 is a per-candidate filter (skip / take_25 / take_50 /
+# take_100), v002 sees the full slate of strategy proposals for each
+# (symbol, date) and picks among Discrete(N+1): skip or take strategy k.
+#
+# Same universe / time ranges / hyperparams / reward params as v001 so
+# the comparison is apples-to-apples — only the env shape differs.
+experiment:
+  name: ppo_selector_v002
+  algorithm: PPO
+  policy: MlpPolicy
+  feature_pipeline: equities_features_v001
+  universe: starter_equities
+  reward_config_version: reward_v001
+
+  # Selects which TrainingVariant the trainer + walk-forward dispatch
+  # to. Adding v3, v4, ... is a registry entry plus a TrainingVariant
+  # impl in rl_swing/rl/variants/.
+  rl_variant: selector_v002
+
+  train_start: "2014-01-01"
+  train_end:   "2020-12-31"
+  validation_start: "2021-01-01"
+  validation_end:   "2021-12-31"
+  test_start: "2022-01-01"
+  test_end:   "2022-12-31"
+
+  total_timesteps_initial: 500000
+  total_timesteps_max: 2000000
+  eval_interval_timesteps: 50000
+  early_stopping_patience_evaluations: 10
+  min_validation_delta: 0.01
+  save_best_only: true
+
+  seeds: [11, 22, 33, 44, 55]
+
+  hyperparams:
+    learning_rate: 3.0e-4
+    n_steps: 2048
+    batch_size: 64
+    n_epochs: 10
+    gamma: 0.99
+    gae_lambda: 0.95
+    clip_range: 0.2
+    ent_coef: 0.01
+    vf_coef: 0.5
+    max_grad_norm: 0.5
+    policy_kwargs:
+      net_arch: [128, 128]
+
+  cost_model:
+    base_spread_bps: 3.0
+    base_slippage_bps: 5.0
+    high_volatility_slippage_multiplier: 2.0
+    event_window_slippage_multiplier: 2.0
+    market_impact_coef: 0.10
+    adverse_selection_bps: 2.0
+
+  reward:
+    transaction_cost_bps: 5.0
+    drawdown_penalty_weight: 0.10
+    turnover_penalty_weight: 0.30
+    holding_period_penalty_weight: 0.05
+    skip_counterfactual_scale: 1.0
+
+  artifact_root: data/models/

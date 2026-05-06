@@ -199,7 +199,16 @@ def validate_from_experiment(
     ),
     include_cost_stress: bool = True,
 ) -> dict:
-    """Run walk-forward validation for one experiment cycle."""
+    """Run walk-forward validation for one experiment cycle.
+
+    Dispatches to the experiment's RL variant for env-specific
+    aggregation + evaluation; this function only handles the common
+    work (loading bars/frames, resolving the artifact path, picking
+    benchmarks, writing the report).
+    """
+    from rl_swing.rl.variants import EvaluationContext
+    from rl_swing.rl.variants.base import load_variant
+
     with open(experiment_path, encoding="utf-8") as f:
         exp = (yaml.safe_load(f) or {}).get("experiment") or {}
 
@@ -214,26 +223,6 @@ def validate_from_experiment(
     pipeline = CoreDailyPipeline()
     frames = list(pipeline.build(bars))
 
-    portfolio = PortfolioState(
-        as_of=datetime(test_end.year, test_end.month, test_end.day),
-        cash=100_000.0, equity=100_000.0,
-    )
-    # Loose candidate config — must match trainer.py to ensure the
-    # trained model is evaluated on the same candidate distribution
-    # it learned from.
-    candidates = list(StrategyAggregator([
-        MomentumStrategy(
-            min_relative_strength=-0.05,
-            min_r20=-0.02,
-            require_sma200_above=False,
-        ),
-        RsiMeanReversionStrategy(rsi_threshold=35.0),
-        BreakoutStrategy(
-            min_relative_volume=0.7,
-            max_distance_below_high=-0.02,
-        ),
-    ]).generate(frames, portfolio))
-
     cost_cfg = exp.get("cost_model") or {}
     cost_model = EquityExecutionModel(**cost_cfg) if cost_cfg else EquityExecutionModel()
     reward_cfg = exp.get("reward") or {}
@@ -245,57 +234,35 @@ def validate_from_experiment(
         skip_counterfactual_scale=reward_cfg.get("skip_counterfactual_scale", 1.0),
     )
 
-    # Baselines
-    scorers: list[PolicyScorer] = []
-    if "random" in include_baselines:
-        scorers.append(RandomPolicyScorer(model_id="baseline_random", seed=42))
-    if "always_take_100" in include_baselines:
-        scorers.append(AlwaysTakePolicyScorer(
-            model_id="baseline_always_take_100", action="take_100"))
-    if "always_take_50" in include_baselines:
-        scorers.append(AlwaysTakePolicyScorer(
-            model_id="baseline_always_take_50", action="take_50"))
-    if "never_take" in include_baselines:
-        scorers.append(NeverTakePolicyScorer(model_id="baseline_never_take"))
-
-    # Trained model. Resolution order:
-    #   1. caller-supplied ``artifact_root_override`` (Kaggle/Colab pass
-    #      this in, since they write to /kaggle/working/artifacts).
+    # Resolve artifact path:
+    #   1. caller-supplied ``artifact_root_override`` (Kaggle/Colab).
     #   2. experiment YAML's ``artifact_root``.
     #   3. ``data/models/`` (local dev default).
     if artifact_root_override is not None:
         artifact_root = Path(artifact_root_override) / exp["name"]
     else:
         artifact_root = Path(exp.get("artifact_root", "data/models/")) / exp["name"]
-    model_artifact = artifact_root / "model.zip"
-    rl_added = False
-    if model_artifact.exists():
-        from rl_swing.rl.agents.dqn_scorer import DqnPolicyScorer
-        from rl_swing.rl.agents.ppo_scorer import PpoPolicyScorer
-        AlgoCls = PpoPolicyScorer if exp["algorithm"].upper() == "PPO" else DqnPolicyScorer
-        scorers.append(AlgoCls(
-            model_id=model_id or exp["name"],
-            artifact_path=str(model_artifact),
-            feature_version="features_v001_core_daily",
-        ))
-        rl_added = True
+    model_artifact: Path | None = artifact_root / "model.zip"
+    rl_added = bool(model_artifact and model_artifact.exists())
 
-    results = []
-    for s in scorers:
-        res = evaluate_policy(
-            s, bars, candidates, frames,
-            cost_model=cost_model, reward_model=reward_model,
-            cost_stress_multiplier=1.0,
-        )
-        results.append(res)
-        if include_cost_stress:
-            res2 = evaluate_policy(
-                s, bars, candidates, frames,
-                cost_model=cost_model, reward_model=reward_model,
-                cost_stress_multiplier=2.0,
-            )
-            res2["model_id"] = res2["model_id"] + "_cost2x"
-            results.append(res2)
+    # Dispatch to the variant for evaluation. Variants own how to map
+    # the ``include_baselines`` tuple to their action space — filter
+    # variants take {random, always_take_100, always_take_50,
+    # never_take}, selector variants take {random, always_skip,
+    # first_fired, highest_signal}.
+    variant_name = exp.get("rl_variant", "filter_v001")
+    variant = load_variant(variant_name)
+    eval_ctx = EvaluationContext(
+        bars=bars, frames=frames,
+        test_start=test_start, test_end=test_end,
+        cost_model=cost_model, reward_model=reward_model,
+        artifact_path=model_artifact,
+        model_id=model_id or exp["name"],
+        include_baselines=tuple(include_baselines),
+        include_cost_stress=include_cost_stress,
+        experiment_config=dict(exp),
+    )
+    policy_results = variant.evaluate(eval_ctx)
 
     # Buy-and-hold (per benchmark symbol, if present)
     bnh: dict[str, float] = {}
@@ -303,16 +270,19 @@ def validate_from_experiment(
         if sym in symbols:
             bnh[sym] = buy_and_hold_return(bars, sym, test_start, test_end)
 
+    # ``n_candidates`` interpretation differs across variants —
+    # filter_v001 reports deduped candidates, selector_v002 reports
+    # packs. We surface what the variant actually saw.
+    n_units = sum(1 for r in policy_results if r.cost_stress_multiplier == 1.0)
     summary = {
         "experiment": exp["name"],
+        "rl_variant": variant_name,
         "test_start": test_start.isoformat(),
         "test_end": test_end.isoformat(),
-        "n_candidates": len(candidates),
+        "n_policies": n_units,
         "rl_model_present": rl_added,
         "buy_and_hold": bnh,
-        "policies": [
-            {k: v for k, v in r.items() if k != "decisions"} for r in results
-        ],
+        "policies": [r.to_dict() for r in policy_results],
     }
 
     report_dir = Path(report_dir) if report_dir else Path("data/reports")

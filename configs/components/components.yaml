@@ -127,3 +127,16 @@ components:
       class: rl_swing.adapters.storage.sqlite_repositories.SqliteStorageBundle
       params:
         database_url: sqlite:///data/cache/rl_swing.sqlite
+
+  # RL training variants. Each variant bundles {env class, observation
+  # builder, action space, candidate aggregation, walk-forward
+  # evaluator}. Trainer + walk-forward dispatch via this category so
+  # adding v3, v4, ... only needs a registry entry plus a TrainingVariant
+  # impl in rl_swing/rl/variants/.
+  rl_variants:
+    filter_v001:
+      class: rl_swing.rl.variants.filter_v001.FilterV001Variant
+      params: {}
+    selector_v002:
+      class: rl_swing.rl.variants.selector_v002.SelectorV002Variant
+      params: {}

@@ -53,6 +53,14 @@ class _ExperimentCfg:
     reward: dict
     artifact_root: str
     data_provider: str = "synthetic_momentum"
+    # Which RL variant to use (registry name in components.yaml under
+    # category 'rl_variants'). Defaults to filter_v001 for backward
+    # compatibility with experiments that don't set it.
+    rl_variant: str = "filter_v001"
+    # Pass-through of the raw experiment YAML block — variants can
+    # read variant-specific knobs without us having to thread every
+    # knob through this dataclass.
+    raw_experiment: dict = None  # type: ignore[assignment]
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> _ExperimentCfg:
@@ -81,6 +89,8 @@ class _ExperimentCfg:
             reward=dict(e.get("reward") or {}),
             artifact_root=str(e.get("artifact_root", "data/models/")),
             data_provider=e.get("data_provider", "synthetic_momentum"),
+            rl_variant=str(e.get("rl_variant", "filter_v001")),
+            raw_experiment=dict(e),
         )
 
 
@@ -121,12 +131,14 @@ def _build_env(
     sampler_kind: str,
     seed: int,
     provider_name: str,
-) -> SwingTradingEnv:
+):
+    """Build a training/validation env for the experiment's RL
+    variant. Dispatches to ``rl_swing.rl.variants`` via the component
+    registry — adding a new variant is a registry entry + new file.
+    """
     from rl_swing.domain import PortfolioState
-    from rl_swing.strategies.aggregator import StrategyAggregator
-    from rl_swing.strategies.breakout import BreakoutStrategy
-    from rl_swing.strategies.mean_reversion import RsiMeanReversionStrategy
-    from rl_swing.strategies.momentum import MomentumStrategy
+    from rl_swing.rl.variants import EnvBuildContext
+    from rl_swing.rl.variants.base import load_variant
 
     provider = _build_provider(provider_name)
     symbols = _load_universe_symbols(cfg.universe)
@@ -139,25 +151,6 @@ def _build_env(
         as_of=datetime(end.year, end.month, end.day),
         cash=100_000.0, equity=100_000.0,
     )
-    # Looser candidate config so the RL filter has discrimination work
-    # to do. The legacy defaults already pre-filter so aggressively
-    # that nearly every surviving candidate is positive-EV, in which
-    # case "always take" is the optimal policy and PPO has no lift.
-    # Loosening admits marginal/borderline setups for the filter to
-    # learn to reject.
-    strategies = [
-        MomentumStrategy(
-            min_relative_strength=-0.05,
-            min_r20=-0.02,
-            require_sma200_above=False,
-        ),
-        RsiMeanReversionStrategy(rsi_threshold=35.0),
-        BreakoutStrategy(
-            min_relative_volume=0.7,
-            max_distance_below_high=-0.02,
-        ),
-    ]
-    candidates = list(StrategyAggregator(strategies).generate(frames, portfolio))
 
     cost = EquityExecutionModel(**cfg.cost_model) if cfg.cost_model else EquityExecutionModel()
     reward = RewardModel(
@@ -168,17 +161,15 @@ def _build_env(
         skip_counterfactual_scale=cfg.reward.get("skip_counterfactual_scale", 1.0),
     )
 
-    return SwingTradingEnv(
-        bars=bars,
-        candidates=candidates,
-        feature_frames=frames,
-        feature_names=ALL_FEATURE_NAMES,
-        sampler_kind=sampler_kind,
-        sampler_seed=seed,
-        sampler_window_days=120,
-        cost_model=cost,
-        reward_model=reward,
+    variant_name = cfg.rl_variant or "filter_v001"
+    variant = load_variant(variant_name)
+    env_ctx = EnvBuildContext(
+        bars=bars, frames=frames, portfolio=portfolio,
+        sampler_kind=sampler_kind, seed=int(seed),
+        cost_model=cost, reward_model=reward,
+        experiment_config=cfg.raw_experiment,
     )
+    return variant.build_env(env_ctx)
 
 
 # ---------------------------------------------------------------------
