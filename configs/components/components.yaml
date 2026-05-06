@@ -140,3 +140,11 @@ components:
     selector_v002:
       class: rl_swing.rl.variants.selector_v002.SelectorV002Variant
       params: {}
+    # FEAT-29: MaskablePPO counterpart of selector_v002. Same env,
+    # observation, reward — only the algorithm and inference scorer
+    # differ (sb3-contrib MaskablePPO + action_masks() over fired
+    # strategy slots). Default-OFF: experiments must opt in by setting
+    # rl_variant: selector_v002_masked AND algorithm: MaskablePPO.
+    selector_v002_masked:
+      class: rl_swing.rl.variants.selector_v002_masked.SelectorV002MaskedVariant
+      params: {}

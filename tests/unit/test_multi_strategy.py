@@ -288,3 +288,157 @@ def test_variant_registry_loads_both_variants():
     assert hasattr(v1, "evaluate")
     assert hasattr(v2, "build_env")
     assert hasattr(v2, "evaluate")
+
+
+# ---------------------------------------------------------------------
+# FEAT-29: action mask unit tests for the MaskablePPO selector lane.
+#
+# The whole point of #29 is that the env tells MaskablePPO which slots
+# are legal so the policy literally cannot pick a non-fired strategy.
+# These tests pin the contract:
+#   - skip (index 0) is ALWAYS True.
+#   - strategy slot k is True iff candidates[k] is not None.
+#   - operator-requested edge case: a pack with exactly one fired
+#     strategy yields a mask permitting only skip + that one slot,
+#     and nothing else.
+def _make_candidate(strategy_id: str, symbol: str = "AAA",
+                    signal_strength: float = 0.5):
+    """Minimal CandidateTrade for mask tests — values don't matter
+    since the mask only cares about None vs not-None."""
+    from rl_swing.domain.candidates import CandidateTrade
+    return CandidateTrade(
+        candidate_id=f"{strategy_id}-{symbol}-test",
+        as_of=datetime(2024, 1, 1),
+        symbol=symbol,
+        strategy_id=strategy_id,
+        direction="long",
+        entry_timing="next_open",
+        base_size_pct=0.10,
+        max_holding_days=10,
+        stop_rule_id=None,
+        exit_rule_id="time_or_atr",
+        signal_strength=signal_strength,
+        metadata={},
+    )
+
+
+def _env_with_pack(pack: StrategyPack, n_strategies: int) -> MultiStrategySwingTradingEnv:
+    """Build a minimal env with a single hand-built pack so mask
+    tests don't depend on the synthetic data fixture or feature
+    frames being present at the pack's date.
+
+    The env's ``reset`` requires a feature frame for the first pack;
+    we register a stub frame so reset succeeds before we read the
+    mask. Bars / cost / reward defaults are fine — these tests don't
+    step the env, they only inspect ``action_masks()``.
+    """
+    from rl_swing.domain import FeatureFrame
+
+    stub_values = {name: 0.0 for name in ALL_FEATURE_NAMES}
+    frame = FeatureFrame(
+        symbol=pack.symbol, as_of=pack.as_of,
+        feature_version="features_v001_core_daily",
+        values=stub_values,
+        feature_names=ALL_FEATURE_NAMES,
+        source_snapshot_id="test-fixture",
+    )
+    env = MultiStrategySwingTradingEnv(
+        bars=[], packs=[pack], feature_frames=[frame],
+        feature_names=ALL_FEATURE_NAMES, n_strategies=n_strategies,
+        sampler_kind="chronological",
+    )
+    env.reset(seed=0)
+    return env
+
+
+def test_action_mask_skip_is_always_true_when_nothing_fired():
+    """Edge case: 0-fired pack should never reach the env in
+    practice (the packer drops them), but if it does, the mask must
+    still permit skip — the policy needs *some* legal action."""
+    pack = StrategyPack(
+        symbol="AAA", as_of=datetime(2024, 1, 5),
+        candidates=(None, None, None),
+    )
+    env = _env_with_pack(pack, n_strategies=3)
+    mask = env.action_masks()
+    assert mask.dtype == bool
+    assert mask.shape == (4,)  # skip + 3 strategy slots
+    assert mask[0] is np.True_ or bool(mask[0]) is True
+    assert not mask[1] and not mask[2] and not mask[3]
+
+
+def test_action_mask_single_fired_strategy_permits_only_skip_plus_that_slot():
+    """OPERATOR-REQUESTED (FEAT-29 scope, 2026-05-06): pack with
+    exactly one fired strategy must produce a mask permitting only
+    skip plus that one slot, and nothing else.
+
+    This is the load-bearing invariant of the entire feature: the
+    mask is what stops MaskablePPO from picking non-fired slots.
+    Regressing this test means the masking is structurally broken
+    and MaskablePPO would fall back to penalty-shaping, defeating
+    the whole point of #29.
+    """
+    fired_only_in_slot_1 = (
+        None,
+        _make_candidate("rsi_mean_reversion"),
+        None,
+    )
+    pack = StrategyPack(
+        symbol="AAA", as_of=datetime(2024, 1, 5),
+        candidates=fired_only_in_slot_1,
+    )
+    env = _env_with_pack(pack, n_strategies=3)
+    mask = env.action_masks()
+
+    assert mask.shape == (4,)
+    # Skip (0) and the fired slot (1+1=2) must be True; everything
+    # else must be False.
+    assert bool(mask[0]) is True, "skip must always be legal"
+    assert bool(mask[1]) is False, "slot 0 didn't fire — must be masked"
+    assert bool(mask[2]) is True, "slot 1 fired — must be unmasked"
+    assert bool(mask[3]) is False, "slot 2 didn't fire — must be masked"
+    # Total legal actions = exactly 2.
+    assert int(mask.sum()) == 2
+
+
+def test_action_mask_all_fired_permits_every_action():
+    pack = StrategyPack(
+        symbol="AAA", as_of=datetime(2024, 1, 5),
+        candidates=(
+            _make_candidate("momentum"),
+            _make_candidate("rsi_mean_reversion"),
+            _make_candidate("breakout"),
+        ),
+    )
+    env = _env_with_pack(pack, n_strategies=3)
+    mask = env.action_masks()
+    assert mask.shape == (4,)
+    assert mask.tolist() == [True, True, True, True]
+
+
+def test_maskable_scorer_static_mask_helper_matches_env_mask():
+    """The inference scorer rebuilds the mask from a pack at predict
+    time (it never has direct access to the training env). Pin that
+    its helper is bit-identical to the env's ``action_masks()`` so
+    train-time and eval-time use the SAME mask logic."""
+    from rl_swing.rl.agents.selector_scorers import MaskablePpoSelectorScorer
+
+    pack = StrategyPack(
+        symbol="AAA", as_of=datetime(2024, 1, 5),
+        candidates=(None, _make_candidate("rsi_mean_reversion"), None),
+    )
+    env = _env_with_pack(pack, n_strategies=3)
+    env_mask = env.action_masks()
+    scorer_mask = MaskablePpoSelectorScorer._action_mask_for_pack(pack, n_strategies=3)
+    assert env_mask.tolist() == scorer_mask.tolist()
+
+
+def test_variant_registry_loads_masked_variant():
+    """selector_v002_masked is registered alongside the unmasked
+    variants and conforms to the TrainingVariant Protocol."""
+    from rl_swing.rl.variants.base import load_variant
+
+    v2m = load_variant("selector_v002_masked")
+    assert v2m.name == "selector_v002_masked"
+    assert hasattr(v2m, "build_env")
+    assert hasattr(v2m, "evaluate")

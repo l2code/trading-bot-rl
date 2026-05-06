@@ -345,13 +345,25 @@ def _run_single_seed(
         provider_name=provider_name,
     )
 
-    if cfg.algorithm.upper() == "PPO":
+    algo = cfg.algorithm.upper()
+    if algo == "PPO":
         model = PPO(
             "MlpPolicy", train_env, seed=seed, verbose=0,
             **cfg.hyperparams,
         )
-    elif cfg.algorithm.upper() == "DQN":
+    elif algo == "DQN":
         model = DQN(
+            "MlpPolicy", train_env, seed=seed, verbose=0,
+            **cfg.hyperparams,
+        )
+    elif algo in ("MASKABLEPPO", "MASKABLE_PPO"):
+        # FEAT-29: sb3-contrib MaskablePPO uses env.action_masks() to
+        # mask out illegal actions BEFORE the policy samples. The
+        # selector_v002_masked variant exposes a mask of
+        # [True, fired_slot_0, ..., fired_slot_N-1] so the policy
+        # cannot select non-fired strategy slots at all.
+        from sb3_contrib import MaskablePPO  # type: ignore[import-not-found]
+        model = MaskablePPO(
             "MlpPolicy", train_env, seed=seed, verbose=0,
             **cfg.hyperparams,
         )
@@ -469,9 +481,21 @@ def _evaluate(
     actions_taken: list[str] = []
     trade_records: list[TradeRecord] = []
 
+    # FEAT-29: if the policy is a MaskablePPO, route action masks
+    # through predict(). Detect by attribute on the model — vanilla
+    # PPO/DQN don't accept ``action_masks`` kwarg, but MaskablePPO
+    # does and the env exposes ``action_masks()`` regardless.
+    is_maskable = type(model).__name__ == "MaskablePPO"
+
     done = False
     while not done:
-        action, _ = model.predict(obs, deterministic=True)
+        if is_maskable and hasattr(env, "action_masks"):
+            mask = env.action_masks()
+            action, _ = model.predict(
+                obs, deterministic=True, action_masks=mask,
+            )
+        else:
+            action, _ = model.predict(obs, deterministic=True)
         obs, reward, terminated, truncated, info = env.step(int(action))
         rewards.append(float(reward))
         if info.get("action") == "take":
