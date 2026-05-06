@@ -1,0 +1,23 @@
+# DANGER: live_guarded mode. All three of:
+#   place_orders: true
+#   allow_live_trading: true
+#   $RL_SWING_LIVE_APPROVAL_TOKEN environment variable
+# must be set before any live order will actually be sent.
+runtime:
+  mode: live_guarded
+  run_id_prefix: live_guarded_daily
+  universe: starter_equities
+  data_provider: yfinance_daily
+  feature_pipeline: equities_features_v001
+  strategies:
+    - momentum_20_60
+    - mean_reversion_rsi
+  policy_scorer: ppo_filter_v001
+  risk_profile: tiny_live_v001
+  broker_adapter: alpaca_live
+  storage_profile: local_sqlite
+  emit_events: true
+  place_orders: false           # default OFF
+  allow_live_trading: false     # second gate
+  require_reconciliation_before_new_orders: true
+  max_live_capital_pct: 0.02

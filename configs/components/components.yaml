@@ -1,0 +1,129 @@
+# Component registry — maps abstract names used in runtime configs to
+# concrete classes. Edit this file (not the runtime config) when adding
+# a new adapter.
+
+components:
+  market_data_providers:
+    yfinance_daily:
+      class: rl_swing.adapters.data.yfinance_provider.YFinanceProvider
+      params:
+        auto_adjust: true
+        cache_dir: data/cache/yfinance
+    wrds_parquet:
+      class: rl_swing.adapters.data.wrds_parquet_provider.WrdsParquetProvider
+      params:
+        # Default: read the same cache trading-bot2 maintains.
+        cache_dir: /home/rissac/projects/trading-bot2/cache/wrds
+    parquet_cache:
+      class: rl_swing.adapters.data.parquet_provider.ParquetProvider
+      params:
+        cache_dir: data/cache/bars
+    synthetic_momentum:
+      class: rl_swing.adapters.data.synthetic_provider.SyntheticProvider
+      params:
+        regime: momentum
+        seed: 11
+    synthetic_mean_reversion:
+      class: rl_swing.adapters.data.synthetic_provider.SyntheticProvider
+      params:
+        regime: mean_reversion
+        seed: 22
+    synthetic_random:
+      class: rl_swing.adapters.data.synthetic_provider.SyntheticProvider
+      params:
+        regime: random_walk
+        seed: 33
+
+  feature_pipelines:
+    equities_features_v001:
+      class: rl_swing.features.pipelines.CoreDailyPipeline
+      params:
+        feature_version: features_v001_core_daily
+
+  strategies:
+    momentum_20_60:
+      class: rl_swing.strategies.momentum.MomentumStrategy
+      params:
+        strategy_id: momentum_20_60
+        lookback_short: 20
+        lookback_long: 60
+        min_relative_strength: 0.0
+        max_holding_days: 10
+        base_size_pct: 0.10
+    mean_reversion_rsi:
+      class: rl_swing.strategies.mean_reversion.RsiMeanReversionStrategy
+      params:
+        strategy_id: mean_reversion_rsi
+        rsi_window: 5
+        rsi_threshold: 25.0
+        max_holding_days: 5
+        base_size_pct: 0.07
+    breakout_20d:
+      class: rl_swing.strategies.breakout.BreakoutStrategy
+      params:
+        strategy_id: breakout_20d
+        breakout_lookback: 20
+        max_holding_days: 10
+        base_size_pct: 0.07
+    trend_following:
+      class: rl_swing.strategies.trend_following.TrendFollowingStrategy
+      params:
+        strategy_id: trend_following
+        sma_short: 50
+        sma_long: 200
+        max_holding_days: 20
+        base_size_pct: 0.07
+
+  policy_scorers:
+    random:
+      class: rl_swing.rl.agents.baseline_scorers.RandomPolicyScorer
+      params:
+        model_id: baseline_random_v1
+        seed: 42
+    always_take_100:
+      class: rl_swing.rl.agents.baseline_scorers.AlwaysTakePolicyScorer
+      params:
+        model_id: baseline_always_take_100
+        action: take_100
+    always_take_50:
+      class: rl_swing.rl.agents.baseline_scorers.AlwaysTakePolicyScorer
+      params:
+        model_id: baseline_always_take_50
+        action: take_50
+    never_take:
+      class: rl_swing.rl.agents.baseline_scorers.NeverTakePolicyScorer
+      params:
+        model_id: baseline_never_take
+    ppo_filter_v001:
+      class: rl_swing.rl.agents.ppo_scorer.PpoPolicyScorer
+      params:
+        model_id: ppo_filter_v001
+        artifact_path: data/models/ppo_filter_v001/model.zip
+        feature_version: features_v001_core_daily
+    dqn_filter_v001:
+      class: rl_swing.rl.agents.dqn_scorer.DqnPolicyScorer
+      params:
+        model_id: dqn_filter_v001
+        artifact_path: data/models/dqn_filter_v001/model.zip
+        feature_version: features_v001_core_daily
+
+  broker_adapters:
+    simulated:
+      class: rl_swing.adapters.broker.simulated_broker.SimulatedBrokerAdapter
+      params:
+        starting_cash: 100000.0
+    shadow:
+      class: rl_swing.adapters.broker.noop_shadow_broker.NoOpShadowBrokerAdapter
+      params: {}
+    alpaca_paper:
+      class: rl_swing.adapters.broker.alpaca_paper_broker.AlpacaPaperBrokerAdapter
+      params: {}
+    alpaca_live:
+      class: rl_swing.adapters.broker.alpaca_live_broker.AlpacaLiveBrokerAdapter
+      params: {}
+
+  storage_profiles:
+    local_sqlite:
+      class: rl_swing.adapters.storage.sqlite_repositories.SqliteStorageBundle
+      params:
+        database_url: sqlite:///data/cache/rl_swing.sqlite

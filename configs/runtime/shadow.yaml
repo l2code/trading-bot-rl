@@ -1,0 +1,16 @@
+runtime:
+  mode: shadow
+  run_id_prefix: shadow_daily
+  universe: starter_equities
+  data_provider: yfinance_daily
+  feature_pipeline: equities_features_v001
+  strategies:
+    - momentum_20_60
+    - mean_reversion_rsi
+    - breakout_20d
+  policy_scorer: ppo_filter_v001
+  risk_profile: conservative_shadow_v001
+  broker_adapter: shadow
+  storage_profile: local_sqlite
+  emit_events: true
+  place_orders: false

@@ -1,0 +1,14 @@
+universe:
+  version: synthetic_v001
+  symbols:
+    - SYN_MOM_1
+    - SYN_MOM_2
+    - SYN_MR_1
+    - SYN_MR_2
+    - SYN_RW_1
+  benchmarks: []
+  filters:
+    min_price: 1
+    min_avg_dollar_volume: 0
+    allow_leveraged_etfs: false
+    allow_shorting: false

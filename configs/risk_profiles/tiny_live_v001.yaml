@@ -1,0 +1,36 @@
+risk_profile:
+  name: tiny_live_v001
+  policies:
+    - class: rl_swing.risk.policies.MaxSinglePositionPolicy
+      params:
+        rule_id: max_single_position
+        max_pct: 0.02
+    - class: rl_swing.risk.policies.MaxPortfolioExposurePolicy
+      params:
+        rule_id: max_portfolio_exposure
+        max_pct: 0.05
+    - class: rl_swing.risk.policies.MaxDailyLossPolicy
+      params:
+        rule_id: max_daily_loss
+        max_pct: 0.002
+    - class: rl_swing.risk.policies.MaxOpenPositionsPolicy
+      params:
+        rule_id: max_open_positions
+        max_positions: 2
+    - class: rl_swing.risk.policies.MaxDailyNewPositionsPolicy
+      params:
+        rule_id: max_daily_new_positions
+        max_positions: 1
+    - class: rl_swing.risk.policies.LiveTradingApprovalPolicy
+      params:
+        rule_id: live_trading_approval
+    - class: rl_swing.risk.policies.LiquidityPolicy
+      params:
+        rule_id: liquidity_min
+        min_avg_dollar_volume: 100000000
+    - class: rl_swing.risk.policies.DuplicateOrderPolicy
+      params:
+        rule_id: duplicate_order
+    - class: rl_swing.risk.policies.KillSwitchPolicy
+      params:
+        rule_id: kill_switch

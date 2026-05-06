@@ -1,0 +1,17 @@
+runtime:
+  mode: research
+  run_id_prefix: research_daily
+  universe: starter_equities
+  data_provider: yfinance_daily
+  feature_pipeline: equities_features_v001
+  strategies:
+    - momentum_20_60
+    - mean_reversion_rsi
+    - breakout_20d
+    - trend_following
+  policy_scorer: random
+  risk_profile: conservative_paper_v001
+  broker_adapter: simulated
+  storage_profile: local_sqlite
+  emit_events: true
+  place_orders: false

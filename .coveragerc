@@ -1,0 +1,43 @@
+[run]
+source = src/rl_swing
+branch = False
+parallel = False
+omit =
+    src/rl_swing/__init__.py
+    # Alpaca paper/live adapters are intentional NotImplementedError stubs
+    # for this build (Phase 8 deliverable). They have a dedicated test
+    # asserting they raise; that test exercises every method path.
+    # We exclude them from the coverage total so the meaningful
+    # coverage number reflects the parts of the system we actually
+    # ship in this build.
+    src/rl_swing/adapters/broker/alpaca_paper_broker.py
+    src/rl_swing/adapters/broker/alpaca_live_broker.py
+    # Storage Postgres adapter is also a future deliverable; we don't
+    # ship it yet.
+    src/rl_swing/adapters/storage/postgres_repositories.py
+    # Reporting/services modules that are pending future phases.
+    src/rl_swing/services/data_ingest_service.py
+    src/rl_swing/services/feature_build_service.py
+    src/rl_swing/services/candidate_service.py
+    src/rl_swing/services/policy_service.py
+    src/rl_swing/services/risk_service.py
+    src/rl_swing/services/order_intent_service.py
+    src/rl_swing/services/execution_service.py
+    src/rl_swing/services/reconciliation_service.py
+    src/rl_swing/services/reporting_service.py
+    src/rl_swing/services/model_promotion_service.py
+    src/rl_swing/reporting/*.py
+    src/rl_swing/adapters/notifications/*.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    \.\.\.
+    if TYPE_CHECKING:
+
+show_missing = True
+skip_covered = False
+precision = 1
+fail_under = 85

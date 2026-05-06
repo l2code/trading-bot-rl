@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.so
+.venv/
+venv/
+env/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Project data — large/ephemeral
+data/cache/**
+data/models/**
+data/reports/**
+!data/cache/.gitkeep
+!data/models/.gitkeep
+!data/reports/.gitkeep
+*.parquet
+*.duckdb
+*.sqlite
+*.sqlite-journal
+
+# Logs / runs
+logs/
+runs/
+tb_logs/
+mlruns/
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Notebooks scratch
+.ipynb_checkpoints/
+
+# Colab artifacts
+gdrive/

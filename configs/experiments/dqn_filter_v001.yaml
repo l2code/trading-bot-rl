@@ -1,0 +1,56 @@
+# DQN trade-filter v001 experiment
+experiment:
+  name: dqn_filter_v001
+  algorithm: DQN
+  policy: MlpPolicy
+  feature_pipeline: equities_features_v001
+  universe: starter_equities
+  reward_config_version: reward_v001
+
+  train_start: "2014-01-01"
+  train_end:   "2020-12-31"
+  validation_start: "2021-01-01"
+  validation_end:   "2021-12-31"
+  test_start: "2022-01-01"
+  test_end:   "2022-12-31"
+
+  total_timesteps_initial: 500000
+  total_timesteps_max: 2000000
+  eval_interval_timesteps: 50000
+  early_stopping_patience_evaluations: 10
+  min_validation_delta: 0.01
+  save_best_only: true
+
+  seeds: [11, 22, 33, 44, 55]
+
+  hyperparams:
+    learning_rate: 1.0e-4
+    buffer_size: 100000
+    learning_starts: 1000
+    batch_size: 64
+    tau: 1.0
+    gamma: 0.99
+    train_freq: 4
+    gradient_steps: 1
+    target_update_interval: 1000
+    exploration_fraction: 0.1
+    exploration_initial_eps: 1.0
+    exploration_final_eps: 0.05
+    policy_kwargs:
+      net_arch: [128, 128]
+
+  cost_model:
+    base_spread_bps: 3.0
+    base_slippage_bps: 5.0
+    high_volatility_slippage_multiplier: 2.0
+    event_window_slippage_multiplier: 2.0
+    market_impact_coef: 0.10
+    adverse_selection_bps: 2.0
+
+  reward:
+    transaction_cost_bps: 5.0
+    drawdown_penalty_weight: 0.10
+    turnover_penalty_weight: 0.02
+    holding_period_penalty_weight: 0.05
+
+  artifact_root: data/models/
