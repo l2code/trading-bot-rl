@@ -1,7 +1,22 @@
 # RESEARCH-003 — v002 selector on yfinance starter_equities
 
+> **PROVISIONAL** as of 2026-05-06 evening. Five simulator/evaluation
+> issues were identified by code review after this verdict was
+> recorded — three P1 affecting both v1 and v2
+> ([#22](https://github.com/l2code/trading-bot-rl/issues/22),
+> [#23](https://github.com/l2code/trading-bot-rl/issues/23),
+> [#24](https://github.com/l2code/trading-bot-rl/issues/24)) and two
+> P2 affecting v2 specifically ([#25](https://github.com/l2code/trading-bot-rl/issues/25)
+> selector not in runtime,
+> [#26](https://github.com/l2code/trading-bot-rl/issues/26) skip
+> reward uses hindsight-best max-over-noise counterfactual).
+> Quantitative metrics here are NOT trustworthy until at least the
+> three P1s land. The "Momentum specialist" qualitative collapse
+> finding is independent of cost/warmup bugs and may survive, but
+> the per_strategy_take_counts may shift after #26.
+
 **Date:** 2026-05-06
-**Verdict:** **NO_GO**
+**Verdict:** **NO_GO** (provisional)
 **Issue:** [#3](https://github.com/l2code/trading-bot-rl/issues/3)
 **Variant:** `selector_v002`
 **Run:** Kaggle `crazypenguin/rl-swing-v002-selector-500k-3seeds`

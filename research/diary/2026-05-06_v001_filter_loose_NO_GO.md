@@ -1,7 +1,19 @@
 # RESEARCH-001 — v001 filter (loose candidate config) on yfinance starter_equities
 
+> **PROVISIONAL** as of 2026-05-06 evening. Three P1 simulator/
+> evaluation bugs were identified by code review after this verdict
+> was recorded ([#22](https://github.com/l2code/trading-bot-rl/issues/22)
+> position-size doesn't scale return,
+> [#23](https://github.com/l2code/trading-bot-rl/issues/23) round-trip
+> costs subtracted once,
+> [#24](https://github.com/l2code/trading-bot-rl/issues/24) walk-
+> forward lacks lookback warmup). Quantitative metrics in this entry
+> are NOT trustworthy until those land and the run is repeated.
+> Qualitative conclusion ("trained model is statistically identical
+> to baseline_always_take_100") may survive but is not confirmed.
+
 **Date:** 2026-05-06
-**Verdict:** **NO_GO**
+**Verdict:** **NO_GO** (provisional)
 **Issue:** [#2](https://github.com/l2code/trading-bot-rl/issues/2)
 **Variant:** `filter_v001`
 **Run:** Kaggle `crazypenguin/rl-swing-v001-500k-3seeds-loose`
