@@ -104,13 +104,17 @@ _ensure("stable_baselines3")
 _ensure("gymnasium")
 
 # Diagnostic: prove which rl_swing tree Python is actually using.
-import importlib
-import rl_swing
+# These imports are deliberately late — they must come AFTER the
+# sys.path mutation above. The E402 noqa is intentional.
+import rl_swing  # noqa: E402
+
 print(f"[kaggle_train] rl_swing.__file__ = {rl_swing.__file__}")
 print(f"[kaggle_train] rl_swing.__path__ = {list(rl_swing.__path__)}")
-import rl_swing.rl
+import rl_swing.rl  # noqa: E402
+
 print(f"[kaggle_train] rl_swing.rl.__path__ = {list(rl_swing.rl.__path__)}")
-import rl_swing.rl.env
+import rl_swing.rl.env  # noqa: E402
+
 print(f"[kaggle_train] rl_swing.rl.env OK at {rl_swing.rl.env.__file__}")
 
 
@@ -147,7 +151,7 @@ print(f"[kaggle_train] training finished in {elapsed:.1f}s")
 #    without sifting the artifact tree.
 # ----------------------------------------------------------------------
 summary_path = WORKING / "summary.json"
-with open(summary_path, "wt", encoding="utf-8") as f:
+with open(summary_path, "w", encoding="utf-8") as f:
     json.dump({
         "experiment": EXPERIMENT,
         "elapsed_seconds": elapsed,
@@ -170,8 +174,8 @@ try:
         artifact_root_override=str(ARTIFACTS),
         include_cost_stress=True,
     )
-    with open(WORKING / "validation_summary.json", "wt", encoding="utf-8") as f:
+    with open(WORKING / "validation_summary.json", "w", encoding="utf-8") as f:
         json.dump(val_summary, f, indent=2, default=str)
-    print(f"[kaggle_train] wrote validation_summary.json")
+    print("[kaggle_train] wrote validation_summary.json")
 except Exception as e:
     print(f"[kaggle_train] WARN: validation step failed: {e}")

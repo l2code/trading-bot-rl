@@ -21,10 +21,9 @@ from pathlib import Path
 import yaml
 
 from rl_swing.adapters.data.synthetic_provider import SyntheticProvider
-from rl_swing.features.pipelines import ALL_FEATURE_NAMES, CoreDailyPipeline
+from rl_swing.features.pipelines import CoreDailyPipeline
 from rl_swing.rl.env.cost_model import EquityExecutionModel
 from rl_swing.rl.env.reward_model import RewardModel
-from rl_swing.rl.env.swing_env import SwingTradingEnv
 
 _log = logging.getLogger(__name__)
 
