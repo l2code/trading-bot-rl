@@ -28,7 +28,7 @@ function, in priority order:
 3. **Reproducibility.** Same experiment YAML + same seed = same
    numbers, every time. Kaggle and local must agree to the bit on
    smoke runs.
-4. **Test discipline.** 242 tests today; coverage floor is 85%.
+4. **Test discipline.** 246 tests today; coverage floor is 85%.
    Every new variant ships with its own test module.
 
 What this project explicitly does *not* yet optimize for:
@@ -190,33 +190,100 @@ of running it is ~5 minutes. Always run it.
 
 ---
 
-## 4. Roadmap (current, ordered by impact-per-effort)
+## 4. Roadmap
 
-Tier 1 (do first, cheap and informative):
-1. Multi-cycle walk-forward (3-4 windows, slide one year each).
-2. Cross-strategy agreement features in observation.
-3. Optuna sweep on entropy_coef and learning_rate.
+The order matters. Skipping ahead = scaling complexity on
+foundations that may still be wrong. Each phase gates on the
+previous phase's evidence. From the operator's 2026-05-06 review.
 
-Tier 2 (architectural, medium effort):
-4. MaskablePPO action masking for selector variants.
-5. RecurrentPPO (LSTM) policy for multi-day context.
-6. Per-symbol embeddings.
-7. Continuous sizing head (Beta distribution).
+### Phase 0 — fix the foundations, then re-run v1 and v2
 
-Tier 3 (substantive, larger):
-8. Distributional RL (IQN) — uncertainty-aware decisions.
-9. Portfolio-aware decisions (positions in observation).
-10. Differential reward shaping (reward over baseline).
-11. Offline RL pretraining from logged decisions.
+P1 simulator/evaluation correctness:
+- [#22](https://github.com/l2code/trading-bot-rl/issues/22)
+  size_pct now scales return — ✅ merged
+- [#23](https://github.com/l2code/trading-bot-rl/issues/23)
+  round-trip cost charged once despite per-side docstring
+- [#24](https://github.com/l2code/trading-bot-rl/issues/24)
+  walk-forward lacks lookback warmup
+- [#36](https://github.com/l2code/trading-bot-rl/issues/36)
+  portfolio equity-curve evaluation (sums-of-returns isn't real)
 
-Tier 4 (production):
-12. Champion/challenger promotion gate.
-13. Feature drift detection.
-14. SHAP attribution.
-15. Replay-buffer logging.
+P2:
+- [#26](https://github.com/l2code/trading-bot-rl/issues/26)
+  v2 hindsight-best skip counterfactual
+- [#25](https://github.com/l2code/trading-bot-rl/issues/25)
+  v2 not wired into runtime DecisionPipeline (deferred until Phase 2)
 
-Tier 1 only commences after the v1/v2 comparison is recorded in a
-research diary entry.
+Then re-run v1 and v2 on Kaggle with corrected metrics. Update
+diaries. **Phase 0 closes when both verdicts are no longer
+PROVISIONAL.**
+
+**Until Phase 0 is done, no new training experiments and no new
+RL machinery.** Better algorithms on a broken simulator just learn
+a cleaner version of the wrong economics.
+
+### Phase 1 — Next Stage (post-Phase-0)
+
+Per the operator's "Next Stage" sequence:
+`fix correctness → prove baselines → run matrix → ablate → shadow → paper`
+
+1. **Prove baselines** — [#30](https://github.com/l2code/trading-bot-rl/issues/30)
+   add supervised / contextual-bandit selector baseline. If PPO
+   can't beat a simple ranker, RL machinery isn't earning its
+   complexity yet. [#17](https://github.com/l2code/trading-bot-rl/issues/17)
+   `take_all_fired` baseline lands here too.
+2. **MaskablePPO** — [#29](https://github.com/l2code/trading-bot-rl/issues/29)
+   formal action masking for v2 selector. Replaces illegal-action
+   penalty with hard mask.
+3. **Promotion matrix** — [#37](https://github.com/l2code/trading-bot-rl/issues/37)
+   run all variants (v1 PPO, v1 DQN, v2 highest-signal, v2 masked
+   PPO, v2 supervised) through the same battery (synthetic /
+   yfinance / WRDS × multi-seed × multi-year WF × cost stress ×
+   crisis windows × universes).
+4. **Baseline-dominance gate** — [#38](https://github.com/l2code/trading-bot-rl/issues/38)
+   v2 must beat *every* declared baseline (not just the strongest)
+   to earn GO.
+5. **Ablations** — [#39](https://github.com/l2code/trading-bot-rl/issues/39)
+   feature-subset sweep tells us what's load-bearing vs noise
+   memorization.
+
+### Phase 2 — runtime + shadow mode
+
+6. **Wire v2 into runtime** — [#25](https://github.com/l2code/trading-bot-rl/issues/25).
+7. **Shadow mode** — [#40](https://github.com/l2code/trading-bot-rl/issues/40)
+   record selections, skipped alternatives, counterfactuals, drift.
+   No trading. The bridge between "passes validation" and "touches
+   real money."
+
+Only after a model clears Phase 1 + sustained Phase 2 does paper
+trading make sense.
+
+### Phase 3 — size and architecture refinements
+
+- [#31](https://github.com/l2code/trading-bot-rl/issues/31)
+  Size-aware v2 action space (recovers v1's sizing dimension).
+- [#34](https://github.com/l2code/trading-bot-rl/issues/34)
+  Set/attention slate encoder (kills slot-index overfitting).
+- [#32](https://github.com/l2code/trading-bot-rl/issues/32)
+  Portfolio-aware chronological v3 — full sequential RL.
+
+### Phase 4 — risk-awareness, OOD safety, production rails
+
+- [#33](https://github.com/l2code/trading-bot-rl/issues/33)
+  Distributional / quantile selector head.
+- [#35](https://github.com/l2code/trading-bot-rl/issues/35)
+  Conservative offline RL (CQL).
+- Champion/challenger gate (not yet filed).
+- Feature drift, SHAP, replay-buffer logging (not yet filed).
+
+### Cheap diagnostics — runnable in parallel, don't gate phases
+
+- [#5](https://github.com/l2code/trading-bot-rl/issues/5) Multi-cycle WF.
+- [#7](https://github.com/l2code/trading-bot-rl/issues/7) Cross-strategy agreement features.
+- [#8](https://github.com/l2code/trading-bot-rl/issues/8) Optuna sweep on entropy/lr (deferred until Phase 0 lands).
+- [#9](https://github.com/l2code/trading-bot-rl/issues/9) Doc-drift script.
+- [#11](https://github.com/l2code/trading-bot-rl/issues/11) Wire acceptance_gate into walk_forward.
+- [#13](https://github.com/l2code/trading-bot-rl/issues/13) Pre-existing ruff cleanup.
 
 ---
 

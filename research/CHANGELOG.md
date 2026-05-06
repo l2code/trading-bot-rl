@@ -29,6 +29,41 @@ codifies the rule.
 
 ---
 
+## 2026-05-06 — OPS: roadmap restructured around operator's "Next Stage" framework
+
+**Issues filed:** [#36](https://github.com/l2code/trading-bot-rl/issues/36) (P1 portfolio equity-curve eval), [#37](https://github.com/l2code/trading-bot-rl/issues/37) (promotion matrix), [#38](https://github.com/l2code/trading-bot-rl/issues/38) (baseline-dominance gate), [#39](https://github.com/l2code/trading-bot-rl/issues/39) (ablation harness), [#40](https://github.com/l2code/trading-bot-rl/issues/40) (shadow mode), and earlier #29–#35 from the RL-design review.
+
+Operator review reframed the project trajectory as a phased
+sequence: `fix correctness → prove baselines → run matrix →
+ablate → shadow → paper`. Each phase gates on the previous
+phase's evidence; more runs only have value as controlled
+experiments inside the matrix harness, not as brute-force
+training.
+
+CLAUDE.md §4 rewritten to reflect this. Phase 0 (P1 simulator
+fixes + v1/v2 re-runs) now explicitly gates all post-Phase-0
+work. Earlier impact-per-effort tier ordering preserved as
+"cheap diagnostics" runnable in parallel.
+
+A new P1 surfaced from the same review: portfolio equity-curve
+evaluation (#36). The current `validation_composite_score`
+sums per-trade returns and computes Sharpe / DD on the trade
+sequence — not on a date-ordered daily P&L. Adds to the
+PROVISIONAL banner scope.
+
+## 2026-05-06 — FIX: P1 size_pct now scales realized portfolio return
+
+**Issue:** [#22](https://github.com/l2code/trading-bot-rl/issues/22)
+**PR:** [#28](https://github.com/l2code/trading-bot-rl/pull/28)
+
+First of the P1 simulator fixes. `ExecutionSimulator` now returns
+`return_pct` as the portfolio contribution (sized + cost-net), not
+the asset's standalone percent return. New regression test asserts
+`take_25` and `take_100` produce proportionally different returns.
+Backward-compat `raw_return_pct` alias preserved. Two more P1s
+queued (#23 round-trip costs, #24 WF warmup) plus the new #36
+portfolio equity-curve evaluation.
+
 ## 2026-05-06 — STRUCTURAL: 5 simulator/evaluation bugs identified by code review; current verdicts marked PROVISIONAL
 
 **Issues filed:** [#22](https://github.com/l2code/trading-bot-rl/issues/22) (P1 size-scale), [#23](https://github.com/l2code/trading-bot-rl/issues/23) (P1 round-trip cost), [#24](https://github.com/l2code/trading-bot-rl/issues/24) (P1 WF warmup), [#25](https://github.com/l2code/trading-bot-rl/issues/25) (P2 selector runtime), [#26](https://github.com/l2code/trading-bot-rl/issues/26) (P2 hindsight skip-CF)
