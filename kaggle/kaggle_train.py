@@ -42,6 +42,7 @@ TOTAL_STEPS   = os.environ.get("RL_SWING_TOTAL_TIMESTEPS")  # may be None
 SEEDS_RAW     = os.environ.get("RL_SWING_SEEDS")            # may be None
 DATA_PROVIDER = os.environ.get("RL_SWING_DATA_PROVIDER")    # may be None
 N_ENVS        = int(os.environ.get("RL_SWING_N_ENVS", "1") or "1")
+HYPERPARAM_OVERRIDES_RAW = os.environ.get("RL_SWING_HYPERPARAM_OVERRIDES")  # JSON dict, may be None
 REPO_URL      = os.environ.get(
     "RL_SWING_REPO_URL", "https://github.com/l2code/trading-bot-rl.git"
 )
@@ -54,6 +55,8 @@ ARTIFACTS.mkdir(parents=True, exist_ok=True)
 print(f"[kaggle_train] experiment={EXPERIMENT!r}")
 print(f"[kaggle_train] total_timesteps={TOTAL_STEPS!r}  seeds={SEEDS_RAW!r}")
 print(f"[kaggle_train] repo={REPO_URL}@{REPO_BRANCH}")
+if HYPERPARAM_OVERRIDES_RAW:
+    print(f"[kaggle_train] hyperparam_overrides={HYPERPARAM_OVERRIDES_RAW}")
 
 
 # ----------------------------------------------------------------------
@@ -101,13 +104,17 @@ _ensure("stable_baselines3")
 _ensure("gymnasium")
 
 # Diagnostic: prove which rl_swing tree Python is actually using.
-import importlib
-import rl_swing
+# These imports are deliberately late — they must come AFTER the
+# sys.path mutation above. The E402 noqa is intentional.
+import rl_swing  # noqa: E402
+
 print(f"[kaggle_train] rl_swing.__file__ = {rl_swing.__file__}")
 print(f"[kaggle_train] rl_swing.__path__ = {list(rl_swing.__path__)}")
-import rl_swing.rl
+import rl_swing.rl  # noqa: E402
+
 print(f"[kaggle_train] rl_swing.rl.__path__ = {list(rl_swing.rl.__path__)}")
-import rl_swing.rl.env
+import rl_swing.rl.env  # noqa: E402
+
 print(f"[kaggle_train] rl_swing.rl.env OK at {rl_swing.rl.env.__file__}")
 
 
@@ -120,6 +127,11 @@ seeds = None
 if SEEDS_RAW:
     seeds = [int(s) for s in SEEDS_RAW.split(",") if s.strip()]
 
+hyperparam_overrides = None
+if HYPERPARAM_OVERRIDES_RAW:
+    hyperparam_overrides = json.loads(HYPERPARAM_OVERRIDES_RAW)
+    print(f"[kaggle_train] applying hyperparam overrides: {hyperparam_overrides}")
+
 t0 = time.time()
 summary = train(
     experiment=EXPERIMENT,
@@ -128,6 +140,7 @@ summary = train(
     data_provider=DATA_PROVIDER,
     artifact_root=str(ARTIFACTS),
     n_envs=N_ENVS,
+    hyperparam_overrides=hyperparam_overrides,
 )
 elapsed = time.time() - t0
 print(f"[kaggle_train] training finished in {elapsed:.1f}s")
@@ -138,7 +151,7 @@ print(f"[kaggle_train] training finished in {elapsed:.1f}s")
 #    without sifting the artifact tree.
 # ----------------------------------------------------------------------
 summary_path = WORKING / "summary.json"
-with open(summary_path, "wt", encoding="utf-8") as f:
+with open(summary_path, "w", encoding="utf-8") as f:
     json.dump({
         "experiment": EXPERIMENT,
         "elapsed_seconds": elapsed,
@@ -161,8 +174,8 @@ try:
         artifact_root_override=str(ARTIFACTS),
         include_cost_stress=True,
     )
-    with open(WORKING / "validation_summary.json", "wt", encoding="utf-8") as f:
+    with open(WORKING / "validation_summary.json", "w", encoding="utf-8") as f:
         json.dump(val_summary, f, indent=2, default=str)
-    print(f"[kaggle_train] wrote validation_summary.json")
+    print("[kaggle_train] wrote validation_summary.json")
 except Exception as e:
     print(f"[kaggle_train] WARN: validation step failed: {e}")

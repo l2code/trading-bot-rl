@@ -53,7 +53,7 @@ def _kaggle_username() -> str:
     if not cfg_path.exists():
         sys.exit(f"Kaggle credentials not found at {cfg_path}. "
                  f"Get them from https://www.kaggle.com/settings/account.")
-    with open(cfg_path, "rt", encoding="utf-8") as f:
+    with open(cfg_path, encoding="utf-8") as f:
         cfg = json.load(f)
     if "username" not in cfg:
         sys.exit(f"Bad kaggle.json: no 'username' key in {cfg_path}")
@@ -78,6 +78,7 @@ def _materialize_kernel(
     n_envs: int,
     repo_url: str,
     repo_branch: str,
+    hyperparam_overrides: dict | None = None,
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -104,6 +105,11 @@ def _materialize_kernel(
         overrides_block += f"_os.environ.setdefault('RL_SWING_DATA_PROVIDER', {data_provider!r})\n"
     if n_envs and n_envs > 1:
         overrides_block += f"_os.environ.setdefault('RL_SWING_N_ENVS', {str(n_envs)!r})\n"
+    if hyperparam_overrides:
+        overrides_block += (
+            f"_os.environ.setdefault('RL_SWING_HYPERPARAM_OVERRIDES', "
+            f"{json.dumps(hyperparam_overrides)!r})\n"
+        )
     overrides_block += "# --- end injection ---\n"
 
     # Find the spot to insert: after the last consecutive ``from __future__``
@@ -202,6 +208,11 @@ def main() -> int:
                     help="Kernel title for the Kaggle UI.")
     ap.add_argument("--no-wait", action="store_true",
                     help="Push and exit; don't poll for completion.")
+    ap.add_argument("--hyperparam-overrides", type=str, default=None,
+                    help="JSON dict of hyperparam overrides, e.g. "
+                         "'{\"ent_coef\": 0.05, \"learning_rate\": 1e-3}'. "
+                         "Merged over the experiment YAML's hyperparams "
+                         "block; override wins.")
     args = ap.parse_args()
 
     username = _kaggle_username()
@@ -213,6 +224,7 @@ def main() -> int:
     kernel_ref = f"{username}/{slug}"
 
     seeds = [int(s) for s in args.seeds.split(",")] if args.seeds else None
+    hyperparam_overrides = json.loads(args.hyperparam_overrides) if args.hyperparam_overrides else None
 
     run_dir = RUN_ROOT / slug
     if run_dir.exists():
@@ -228,6 +240,7 @@ def main() -> int:
         n_envs=args.n_envs,
         repo_url=args.repo_url,
         repo_branch=args.repo_branch,
+        hyperparam_overrides=hyperparam_overrides,
     )
     print(f"[kaggle_run] materialized kernel at {run_dir}")
     print(f"[kaggle_run] pushing as {kernel_ref}")
@@ -248,7 +261,7 @@ def main() -> int:
 
     summary = out_dir / "summary.json"
     if summary.exists():
-        print(f"[kaggle_run] summary.json:")
+        print("[kaggle_run] summary.json:")
         print(summary.read_text())
     else:
         print(f"[kaggle_run] WARN: no summary.json in output. "

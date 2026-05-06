@@ -36,6 +36,7 @@ def train(
     data_provider: str | None = None,
     artifact_root: str | None = None,
     n_envs: int = 1,
+    hyperparam_overrides: dict | None = None,
 ) -> dict:
     """Run training from a notebook. Returns the same summary dict the
     CLI ``rl-swing train`` writes to disk.
@@ -43,6 +44,10 @@ def train(
     ``n_envs > 1`` uses ``SubprocVecEnv`` to run that many parallel
     environment workers. Roughly linear speedup up to your CPU core
     count for our daily-bar workload.
+
+    ``hyperparam_overrides`` is a shallow dict (e.g. ``{"ent_coef":
+    0.05}``) that merges over the experiment YAML's ``hyperparams``
+    block. Used by the Kaggle sweep driver to A/B configurations.
     """
     from rl_swing.rl.training.trainer import train_from_experiment
 
@@ -58,6 +63,7 @@ def train(
                     data_provider_override=data_provider,
                     artifact_root_override=artifact_root,
                     n_envs=n_envs,
+                    hyperparam_overrides=hyperparam_overrides,
                 )
             )
         return {"runs": summaries}
@@ -68,4 +74,5 @@ def train(
         data_provider_override=data_provider,
         artifact_root_override=artifact_root,
         n_envs=n_envs,
+        hyperparam_overrides=hyperparam_overrides,
     )

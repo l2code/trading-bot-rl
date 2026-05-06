@@ -21,10 +21,9 @@ from pathlib import Path
 import yaml
 
 from rl_swing.adapters.data.synthetic_provider import SyntheticProvider
-from rl_swing.features.pipelines import ALL_FEATURE_NAMES, CoreDailyPipeline
+from rl_swing.features.pipelines import CoreDailyPipeline
 from rl_swing.rl.env.cost_model import EquityExecutionModel
 from rl_swing.rl.env.reward_model import RewardModel
-from rl_swing.rl.env.swing_env import SwingTradingEnv
 
 _log = logging.getLogger(__name__)
 
@@ -181,8 +180,20 @@ def train_from_experiment(
     data_provider_override: str | None = None,
     artifact_root_override: str | None = None,
     n_envs: int = 1,
+    hyperparam_overrides: dict | None = None,
 ) -> dict:
+    """Train from an experiment YAML.
+
+    ``hyperparam_overrides`` is a shallow dict that merges over
+    ``cfg.hyperparams`` (override wins). Useful for CLI / sweep
+    drivers that want to A/B different ``ent_coef`` or
+    ``learning_rate`` values without editing the YAML.
+    """
     cfg = _ExperimentCfg.from_yaml(experiment_path)
+    if hyperparam_overrides:
+        merged = dict(cfg.hyperparams)
+        merged.update(hyperparam_overrides)
+        cfg.hyperparams = merged
     total_timesteps = int(total_timesteps_override or cfg.total_timesteps_initial)
     seeds = [seed_override] if seed_override is not None else cfg.seeds
     artifact_root = Path(artifact_root_override or cfg.artifact_root)
@@ -197,6 +208,7 @@ def train_from_experiment(
         "seeds": seeds,
         "data_provider": provider_name,
         "n_envs": n_envs,
+        "hyperparam_overrides": dict(hyperparam_overrides) if hyperparam_overrides else None,
         "runs": [],
     }
 
