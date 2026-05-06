@@ -42,6 +42,7 @@ TOTAL_STEPS   = os.environ.get("RL_SWING_TOTAL_TIMESTEPS")  # may be None
 SEEDS_RAW     = os.environ.get("RL_SWING_SEEDS")            # may be None
 DATA_PROVIDER = os.environ.get("RL_SWING_DATA_PROVIDER")    # may be None
 N_ENVS        = int(os.environ.get("RL_SWING_N_ENVS", "1") or "1")
+HYPERPARAM_OVERRIDES_RAW = os.environ.get("RL_SWING_HYPERPARAM_OVERRIDES")  # JSON dict, may be None
 REPO_URL      = os.environ.get(
     "RL_SWING_REPO_URL", "https://github.com/l2code/trading-bot-rl.git"
 )
@@ -54,6 +55,8 @@ ARTIFACTS.mkdir(parents=True, exist_ok=True)
 print(f"[kaggle_train] experiment={EXPERIMENT!r}")
 print(f"[kaggle_train] total_timesteps={TOTAL_STEPS!r}  seeds={SEEDS_RAW!r}")
 print(f"[kaggle_train] repo={REPO_URL}@{REPO_BRANCH}")
+if HYPERPARAM_OVERRIDES_RAW:
+    print(f"[kaggle_train] hyperparam_overrides={HYPERPARAM_OVERRIDES_RAW}")
 
 
 # ----------------------------------------------------------------------
@@ -120,6 +123,11 @@ seeds = None
 if SEEDS_RAW:
     seeds = [int(s) for s in SEEDS_RAW.split(",") if s.strip()]
 
+hyperparam_overrides = None
+if HYPERPARAM_OVERRIDES_RAW:
+    hyperparam_overrides = json.loads(HYPERPARAM_OVERRIDES_RAW)
+    print(f"[kaggle_train] applying hyperparam overrides: {hyperparam_overrides}")
+
 t0 = time.time()
 summary = train(
     experiment=EXPERIMENT,
@@ -128,6 +136,7 @@ summary = train(
     data_provider=DATA_PROVIDER,
     artifact_root=str(ARTIFACTS),
     n_envs=N_ENVS,
+    hyperparam_overrides=hyperparam_overrides,
 )
 elapsed = time.time() - t0
 print(f"[kaggle_train] training finished in {elapsed:.1f}s")
