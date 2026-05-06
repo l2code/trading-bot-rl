@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import sys
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -10,9 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from rl_swing.adapters.data.synthetic_provider import SyntheticProvider
-from rl_swing.domain import PortfolioState
-from rl_swing.features.pipelines import ALL_FEATURE_NAMES, CoreDailyPipeline
+from rl_swing.features.pipelines import ALL_FEATURE_NAMES
 from rl_swing.rl.agents.selector_scorers import (
     AlwaysFirstFiredSelectorScorer,
     AlwaysSkipSelectorScorer,
@@ -21,8 +19,8 @@ from rl_swing.rl.agents.selector_scorers import (
 )
 from rl_swing.rl.env.multi_strategy_env import MultiStrategySwingTradingEnv
 from rl_swing.rl.env.multi_strategy_observation import (
-    MultiStrategyObservationBuilder,
     SLOT_DIM,
+    MultiStrategyObservationBuilder,
 )
 from rl_swing.strategies.breakout import BreakoutStrategy
 from rl_swing.strategies.mean_reversion import RsiMeanReversionStrategy
@@ -60,7 +58,7 @@ def test_packer_groups_by_symbol_date_without_dedupe(synthetic_data):
         assert p.n_fired >= 1
         assert len(p.candidates) == packer.n_slots
     # Pack ordering: chronological then alphabetical by symbol.
-    for a, b in zip(packs, packs[1:]):
+    for a, b in zip(packs, packs[1:], strict=False):
         assert (a.as_of, a.symbol) < (b.as_of, b.symbol)
 
 
@@ -203,6 +201,58 @@ def test_env_illegal_action_returns_penalty(synthetic_data):
 
 
 # ---------------------------------------------------------------------
+def test_env_skip_counterfactual_mode_validation():
+    """FIX-26: invalid mode must raise ValueError at construction
+    time so a typo in experiment YAML can't silently fall through."""
+    with pytest.raises(ValueError, match="skip_counterfactual_mode"):
+        MultiStrategySwingTradingEnv(
+            bars=[], packs=[], feature_frames=[],
+            feature_names=ALL_FEATURE_NAMES, n_strategies=1,
+            skip_counterfactual_mode="invalid_mode_typo",
+        )
+
+
+def test_env_skip_counterfactual_mode_default_is_highest_signal(synthetic_data):
+    """FIX-26: default mode is highest_signal (no hindsight peek)."""
+    bars, frames, portfolio = synthetic_data
+    packer = MultiStrategyPacker([
+        MomentumStrategy(min_relative_strength=-0.5, min_r20=-0.5,
+                         require_sma200_above=False),
+    ])
+    packs = packer.pack(frames, portfolio)
+    if not packs:
+        pytest.skip("no packs in synthetic window")
+    env = MultiStrategySwingTradingEnv(
+        bars=bars, packs=packs, feature_frames=frames,
+        feature_names=ALL_FEATURE_NAMES, n_strategies=1,
+        sampler_kind="chronological",
+    )
+    assert env.skip_counterfactual_mode == "highest_signal"
+
+
+def test_env_skip_counterfactual_mode_max_is_legacy(synthetic_data):
+    """FIX-26: max mode is reachable for reproducing pre-FIX-26 runs."""
+    bars, frames, portfolio = synthetic_data
+    packer = MultiStrategyPacker([
+        MomentumStrategy(min_relative_strength=-0.5, min_r20=-0.5,
+                         require_sma200_above=False),
+    ])
+    packs = packer.pack(frames, portfolio)
+    if not packs:
+        pytest.skip("no packs in synthetic window")
+    env = MultiStrategySwingTradingEnv(
+        bars=bars, packs=packs, feature_frames=frames,
+        feature_names=ALL_FEATURE_NAMES, n_strategies=1,
+        sampler_kind="chronological",
+        skip_counterfactual_mode="max",
+    )
+    env.reset(seed=0)
+    _, reward, _, _, info = env.step(0)
+    assert info["action"] == "skip"
+    # max mode CAN access counterfactual; reward is mirrored take.
+    assert reward != 0.0 or info.get("best_cf_return") in (0.0, None)
+
+
 def test_baseline_scorers_respect_fired_mask():
     """The selector baselines must never return an action for a
     strategy that didn't fire in the pack."""

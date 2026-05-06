@@ -63,5 +63,14 @@ experiment:
     turnover_penalty_weight: 0.30
     holding_period_penalty_weight: 0.05
     skip_counterfactual_scale: 1.0
+    # FIX-26: how the skip reward picks its counterfactual outcome
+    # among the strategies that fired on the pack.
+    #   highest_signal — picks the strategy with max signal_strength
+    #                    (uses prior info only, no hindsight peek)
+    #   max            — hindsight-best (pre-FIX-26 behavior;
+    #                    max-over-noise biased upward as N grows)
+    #   mean           — average across fired strategies
+    #   none           — no counterfactual; skip reward = 0
+    skip_counterfactual_mode: highest_signal
 
   artifact_root: data/models/

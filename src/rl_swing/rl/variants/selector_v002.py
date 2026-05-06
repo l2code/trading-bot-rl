@@ -15,8 +15,8 @@ Baselines:
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Sequence
 
 import gymnasium as gym
 
@@ -37,13 +37,11 @@ from rl_swing.rl.agents.selector_scorers import (
 from rl_swing.rl.env.cost_model import EquityExecutionModel
 from rl_swing.rl.env.execution_simulator import ExecutionSimulator
 from rl_swing.rl.env.multi_strategy_env import MultiStrategySwingTradingEnv
-from rl_swing.rl.env.reward_model import RewardModel
 from rl_swing.rl.validation.metrics import validation_composite_score
 from rl_swing.rl.variants.base import (
     EnvBuildContext,
     EvaluationContext,
     PolicyResult,
-    TrainingVariant,
 )
 from rl_swing.strategies.breakout import BreakoutStrategy
 from rl_swing.strategies.mean_reversion import RsiMeanReversionStrategy
@@ -88,6 +86,15 @@ class SelectorV002Variant:
     # ---- env -----------------------------------------------------
     def build_env(self, ctx: EnvBuildContext) -> gym.Env:
         packs, n_slots = _pack_candidates(ctx.frames, ctx.portfolio)
+        # FIX-26: skip_counterfactual_mode controls how the skip
+        # reward's counterfactual is chosen. Default (and recommended
+        # for new experiments) is "highest_signal" — uses prior info
+        # only, no hindsight peek. The legacy "max" mode has a max-
+        # over-noise bias that grows with N strategies.
+        reward_cfg = (ctx.experiment_config or {}).get("reward") or {}
+        skip_cf_mode = reward_cfg.get(
+            "skip_counterfactual_mode", "highest_signal"
+        )
         return MultiStrategySwingTradingEnv(
             bars=ctx.bars,
             packs=packs,
@@ -99,6 +106,7 @@ class SelectorV002Variant:
             sampler_window_days=120,
             cost_model=ctx.cost_model,
             reward_model=ctx.reward_model,
+            skip_counterfactual_mode=skip_cf_mode,
         )
 
     # ---- evaluation ---------------------------------------------
@@ -158,6 +166,11 @@ class SelectorV002Variant:
         ctx.cost_model.cost_stress_multiplier = float(cost_stress_multiplier)
         sim = ExecutionSimulator()
 
+        # FIX-26: mirror the train-time env's skip_counterfactual_mode
+        # so eval-time skip rewards use the same convention.
+        reward_cfg = (ctx.experiment_config or {}).get("reward") or {}
+        skip_cf_mode = reward_cfg.get("skip_counterfactual_mode", "highest_signal")
+
         by_symbol: dict[str, list[MarketBar]] = {}
         for b in ctx.bars:
             by_symbol.setdefault(b.symbol, []).append(b)
@@ -192,7 +205,10 @@ class SelectorV002Variant:
                     components={}, cost_stress_multiplier=cost_stress_multiplier,
                 )
             if action == 0:
-                cf = self._best_counterfactual(pack, frame, by_symbol, ctx.cost_model, sim)
+                cf = self._best_counterfactual(
+                    pack, frame, by_symbol, ctx.cost_model, sim,
+                    mode=skip_cf_mode,
+                )
                 reward = ctx.reward_model.reward_for_skip(cf)
                 rewards.append(reward)
                 actions.append("skip")
@@ -279,14 +295,54 @@ class SelectorV002Variant:
     def _best_counterfactual(
         self, pack, frame, by_symbol,
         cost_model: EquityExecutionModel, sim: ExecutionSimulator,
+        mode: str = "highest_signal",
     ):
-        best = None
-        for c in pack.candidates:
-            if c is None:
-                continue
-            outcome = self._simulate_take(c, frame, by_symbol, cost_model, sim)
-            if outcome is None:
-                continue
-            if best is None or outcome.return_pct > best.return_pct:
-                best = outcome
-        return best
+        """FIX-26: mode-aware skip counterfactual. Mirrors the env's
+        ``_skip_counterfactual`` semantics so train-time and eval-time
+        skip rewards use the same convention. Default
+        ``highest_signal`` uses prior info only (no hindsight peek)."""
+        if mode == "none":
+            return None
+        if mode == "highest_signal":
+            chosen = None
+            best_strength = -1.0
+            for c in pack.candidates:
+                if c is None:
+                    continue
+                if c.signal_strength > best_strength:
+                    chosen = c
+                    best_strength = c.signal_strength
+            if chosen is None:
+                return None
+            return self._simulate_take(chosen, frame, by_symbol, cost_model, sim)
+        if mode == "max":
+            best = None
+            for c in pack.candidates:
+                if c is None:
+                    continue
+                outcome = self._simulate_take(c, frame, by_symbol, cost_model, sim)
+                if outcome is None:
+                    continue
+                if best is None or outcome.return_pct > best.return_pct:
+                    best = outcome
+            return best
+        if mode == "mean":
+            outcomes = []
+            for c in pack.candidates:
+                if c is None:
+                    continue
+                o = self._simulate_take(c, frame, by_symbol, cost_model, sim)
+                if o is not None:
+                    outcomes.append(o)
+            if not outcomes:
+                return None
+            from dataclasses import replace
+            mean_ret = sum(o.return_pct for o in outcomes) / len(outcomes)
+            mean_asset = sum(o.asset_return_pct for o in outcomes) / len(outcomes)
+            return replace(
+                outcomes[0],
+                return_pct=mean_ret,
+                raw_return_pct=mean_asset,
+                asset_return_pct=mean_asset,
+            )
+        raise ValueError(f"unknown skip_counterfactual_mode: {mode!r}")
