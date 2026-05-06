@@ -175,6 +175,7 @@ def train_from_experiment(
     seed_override: int | None = None,
     data_provider_override: str | None = None,
     artifact_root_override: str | None = None,
+    n_envs: int = 1,
 ) -> dict:
     cfg = _ExperimentCfg.from_yaml(experiment_path)
     total_timesteps = int(total_timesteps_override or cfg.total_timesteps_initial)
@@ -182,6 +183,7 @@ def train_from_experiment(
     artifact_root = Path(artifact_root_override or cfg.artifact_root)
     artifact_root.mkdir(parents=True, exist_ok=True)
     provider_name = data_provider_override or cfg.data_provider
+    n_envs = max(1, int(n_envs))
 
     summary = {
         "experiment": cfg.name,
@@ -189,6 +191,7 @@ def train_from_experiment(
         "total_timesteps": total_timesteps,
         "seeds": seeds,
         "data_provider": provider_name,
+        "n_envs": n_envs,
         "runs": [],
     }
 
@@ -199,6 +202,7 @@ def train_from_experiment(
             total_timesteps=total_timesteps,
             artifact_root=artifact_root,
             provider_name=provider_name,
+            n_envs=n_envs,
         )
         summary["runs"].append(run_summary)
 
@@ -216,27 +220,41 @@ def _run_single_seed(
     total_timesteps: int,
     artifact_root: Path,
     provider_name: str,
+    n_envs: int = 1,
 ) -> dict:
     from gymnasium.wrappers import TimeLimit
     from stable_baselines3 import DQN, PPO
     from stable_baselines3.common.callbacks import BaseCallback
     from stable_baselines3.common.monitor import Monitor
-    from stable_baselines3.common.vec_env import DummyVecEnv
+    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
     out_dir = artifact_root / cfg.name / f"seed_{seed}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    train_env_factory = lambda: Monitor(  # noqa: E731
-        TimeLimit(
-            _build_env(
-                cfg, start=cfg.train_start, end=cfg.train_end,
-                sampler_kind="random", seed=seed,
-                provider_name=provider_name,
-            ),
-            max_episode_steps=512,
-        )
-    )
-    train_env = DummyVecEnv([train_env_factory])
+    # Each parallel env gets a slightly different seed so the rollouts
+    # diverge — otherwise SubprocVecEnv with identical seeds is just
+    # wasted compute.
+    def make_factory(env_idx: int):
+        def _factory():
+            return Monitor(
+                TimeLimit(
+                    _build_env(
+                        cfg, start=cfg.train_start, end=cfg.train_end,
+                        sampler_kind="random",
+                        seed=int(seed) * 100 + env_idx,
+                        provider_name=provider_name,
+                    ),
+                    max_episode_steps=512,
+                )
+            )
+        return _factory
+
+    factories = [make_factory(i) for i in range(max(1, n_envs))]
+    if n_envs > 1:
+        _log.info("seed=%s using SubprocVecEnv with %d parallel envs", seed, n_envs)
+        train_env = SubprocVecEnv(factories, start_method="spawn")
+    else:
+        train_env = DummyVecEnv(factories)
 
     val_env = _build_env(
         cfg, start=cfg.validation_start, end=cfg.validation_end,

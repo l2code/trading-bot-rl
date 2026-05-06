@@ -75,6 +75,7 @@ def _materialize_kernel(
     total_timesteps: int | None,
     seeds: list[int] | None,
     data_provider: str | None,
+    n_envs: int,
     repo_url: str,
     repo_branch: str,
 ) -> None:
@@ -101,6 +102,8 @@ def _materialize_kernel(
         overrides_block += f"_os.environ.setdefault('RL_SWING_SEEDS', {','.join(map(str, seeds))!r})\n"
     if data_provider:
         overrides_block += f"_os.environ.setdefault('RL_SWING_DATA_PROVIDER', {data_provider!r})\n"
+    if n_envs and n_envs > 1:
+        overrides_block += f"_os.environ.setdefault('RL_SWING_N_ENVS', {str(n_envs)!r})\n"
     overrides_block += "# --- end injection ---\n"
 
     # Find the spot to insert: after the last consecutive ``from __future__``
@@ -188,6 +191,9 @@ def main() -> int:
     ap.add_argument("--data-provider", type=str, default=None,
                     help="Override the experiment's data provider, "
                          "e.g. yfinance_daily, synthetic_momentum.")
+    ap.add_argument("--n-envs", type=int, default=1,
+                    help="Parallel envs (SubprocVecEnv when >1). "
+                         "4 is a good default on Kaggle's CPU runner.")
     ap.add_argument("--repo-url", default="https://github.com/l2code/trading-bot-rl.git")
     ap.add_argument("--repo-branch", default="main")
     ap.add_argument("--slug", default=None,
@@ -219,6 +225,7 @@ def main() -> int:
         total_timesteps=args.total_timesteps,
         seeds=seeds,
         data_provider=args.data_provider,
+        n_envs=args.n_envs,
         repo_url=args.repo_url,
         repo_branch=args.repo_branch,
     )

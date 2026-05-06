@@ -41,6 +41,7 @@ EXPERIMENT    = os.environ.get(
 TOTAL_STEPS   = os.environ.get("RL_SWING_TOTAL_TIMESTEPS")  # may be None
 SEEDS_RAW     = os.environ.get("RL_SWING_SEEDS")            # may be None
 DATA_PROVIDER = os.environ.get("RL_SWING_DATA_PROVIDER")    # may be None
+N_ENVS        = int(os.environ.get("RL_SWING_N_ENVS", "1") or "1")
 REPO_URL      = os.environ.get(
     "RL_SWING_REPO_URL", "https://github.com/l2code/trading-bot-rl.git"
 )
@@ -126,6 +127,7 @@ summary = train(
     seeds=seeds,
     data_provider=DATA_PROVIDER,
     artifact_root=str(ARTIFACTS),
+    n_envs=N_ENVS,
 )
 elapsed = time.time() - t0
 print(f"[kaggle_train] training finished in {elapsed:.1f}s")

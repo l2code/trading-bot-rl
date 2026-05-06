@@ -35,9 +35,15 @@ def train(
     seeds: Iterable[int] | None = None,
     data_provider: str | None = None,
     artifact_root: str | None = None,
+    n_envs: int = 1,
 ) -> dict:
     """Run training from a notebook. Returns the same summary dict the
-    CLI ``rl-swing train`` writes to disk."""
+    CLI ``rl-swing train`` writes to disk.
+
+    ``n_envs > 1`` uses ``SubprocVecEnv`` to run that many parallel
+    environment workers. Roughly linear speedup up to your CPU core
+    count for our daily-bar workload.
+    """
     from rl_swing.rl.training.trainer import train_from_experiment
 
     if seeds is not None and seed is None:
@@ -51,6 +57,7 @@ def train(
                     seed_override=int(s),
                     data_provider_override=data_provider,
                     artifact_root_override=artifact_root,
+                    n_envs=n_envs,
                 )
             )
         return {"runs": summaries}
@@ -60,4 +67,5 @@ def train(
         seed_override=seed,
         data_provider_override=data_provider,
         artifact_root_override=artifact_root,
+        n_envs=n_envs,
     )

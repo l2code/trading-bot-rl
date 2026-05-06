@@ -72,11 +72,14 @@ def run(frequency: str, mode: str, config_path: str, components_path: str) -> No
               help="Override the experiment's seed list (single seed).")
 @click.option("--data-provider", type=str, default=None,
               help="Override the data provider (e.g. synthetic_momentum).")
+@click.option("--n-envs", type=int, default=1, show_default=True,
+              help="Parallel envs (SubprocVecEnv when >1). 4 is a good default on a 4-core CPU.")
 def train(
     experiment_path: str,
     total_timesteps: int | None,
     seed: int | None,
     data_provider: str | None,
+    n_envs: int,
 ) -> None:
     """Train a PolicyScorer per the given experiment config."""
     from rl_swing.rl.training.trainer import train_from_experiment
@@ -86,6 +89,7 @@ def train(
         total_timesteps_override=total_timesteps,
         seed_override=seed,
         data_provider_override=data_provider,
+        n_envs=n_envs,
     )
 
 
