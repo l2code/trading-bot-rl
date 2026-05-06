@@ -23,9 +23,9 @@ from __future__ import annotations
 import logging
 import random
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from typing import Sequence
 
 import gymnasium as gym
 import numpy as np
@@ -150,7 +150,36 @@ class MultiStrategySwingTradingEnv(gym.Env):
         starting_equity: float = 100_000.0,
         max_steps_per_episode: int | None = None,
         illegal_action_penalty: float = 0.5,
+        skip_counterfactual_mode: str = "highest_signal",
     ) -> None:
+        """
+        ``skip_counterfactual_mode`` controls which counterfactual
+        outcome the skip-reward mirrors. Choices:
+
+        - ``"highest_signal"`` (default, FIX-26): use the counter-
+          factual of the strategy with the highest ``signal_strength``
+          among those that fired. Uses prior information only — no
+          hindsight peek into realized outcomes. Avoids the max-over-
+          noise bias of ``"max"``.
+        - ``"max"``: use the maximum-return counterfactual among
+          fired strategies. This is a hindsight peek — biased upward
+          as the number of fired strategies grows. Kept for
+          reproducibility of pre-FIX-26 results; not recommended for
+          new experiments.
+        - ``"mean"``: average the counterfactuals across fired
+          strategies. Removes the max-over-noise bias but treats
+          unfired-when-they-shouldn't-have-fired strategies as votes
+          (debatable).
+        - ``"none"``: pass ``None`` to ``reward_for_skip`` — the
+          reward model returns 0 for skips. Use when you want the
+          policy to be neutral on skips.
+        """
+        skip_counterfactual_mode = str(skip_counterfactual_mode)
+        if skip_counterfactual_mode not in {"highest_signal", "max", "mean", "none"}:
+            raise ValueError(
+                f"skip_counterfactual_mode={skip_counterfactual_mode!r} "
+                f"not in {{highest_signal, max, mean, none}}"
+            )
         super().__init__()
         self.bars = _PackBars()
         self.bars.add(bars)
@@ -169,6 +198,7 @@ class MultiStrategySwingTradingEnv(gym.Env):
         self.starting_equity = float(starting_equity)
         self.max_steps_per_episode = max_steps_per_episode
         self.illegal_action_penalty = float(illegal_action_penalty)
+        self.skip_counterfactual_mode = skip_counterfactual_mode
 
         self.sampler_kind = sampler_kind
         self.sampler_seed = sampler_seed
@@ -242,7 +272,6 @@ class MultiStrategySwingTradingEnv(gym.Env):
         frame = self.feature_frames_by_key.get((pack.symbol, pack.as_of))
         if frame is None:
             return np.zeros(self.observation_builder.dim, dtype=np.float32)
-        from rl_swing.domain import PortfolioState
         ps = PortfolioState(
             as_of=pack.as_of, cash=self.starting_equity,
             equity=self.starting_equity,
@@ -275,25 +304,80 @@ class MultiStrategySwingTradingEnv(gym.Env):
             starting_equity=self.starting_equity,
         )
 
-    def _best_counterfactual(self, pack: StrategyPack):
-        """The best-return counterfactual among the strategies that
-        fired. None if no strategy fired (shouldn't happen — packer
-        only emits packs with at least one fire)."""
-        best = None
-        for c in pack.candidates:
-            if c is None:
-                continue
-            outcome = self._simulate_take(c)
-            if outcome is None:
-                continue
-            if best is None or outcome.return_pct > best.return_pct:
-                best = outcome
-        return best
+    def _skip_counterfactual(self, pack: StrategyPack):
+        """The counterfactual outcome the skip-reward mirrors.
+
+        Mode is set via ``skip_counterfactual_mode`` constructor arg.
+        See FIX-26 issue + class docstring for the rationale on
+        each mode. Returns either a TradeOutcome (which
+        ``reward_for_skip`` uses to compute its mirrored reward),
+        or None (which yields 0 reward).
+        """
+        mode = self.skip_counterfactual_mode
+
+        if mode == "none":
+            return None
+
+        if mode == "highest_signal":
+            # Pick the strategy with the highest signal_strength
+            # among those that fired — uses prior information only,
+            # no hindsight peek into realized returns.
+            chosen = None
+            best_strength = -1.0
+            for c in pack.candidates:
+                if c is None:
+                    continue
+                if c.signal_strength > best_strength:
+                    chosen = c
+                    best_strength = c.signal_strength
+            if chosen is None:
+                return None
+            return self._simulate_take(chosen)
+
+        if mode == "max":
+            # Hindsight-best — biased upward as N grows.
+            best = None
+            for c in pack.candidates:
+                if c is None:
+                    continue
+                outcome = self._simulate_take(c)
+                if outcome is None:
+                    continue
+                if best is None or outcome.return_pct > best.return_pct:
+                    best = outcome
+            return best
+
+        if mode == "mean":
+            # Average across fired strategies. Synthesize a
+            # TradeOutcome with the mean return_pct so the existing
+            # reward_for_skip machinery works unchanged. Other fields
+            # taken from one representative outcome.
+            outcomes = []
+            for c in pack.candidates:
+                if c is None:
+                    continue
+                o = self._simulate_take(c)
+                if o is not None:
+                    outcomes.append(o)
+            if not outcomes:
+                return None
+            mean_ret = sum(o.return_pct for o in outcomes) / len(outcomes)
+            mean_asset = sum(o.asset_return_pct for o in outcomes) / len(outcomes)
+            from dataclasses import replace
+            return replace(
+                outcomes[0],
+                return_pct=mean_ret,
+                raw_return_pct=mean_asset,
+                asset_return_pct=mean_asset,
+            )
+
+        # Unreachable given the validation in __init__.
+        raise AssertionError(f"unknown skip_counterfactual_mode: {mode!r}")
 
     def _step_for_pack(self, pack: StrategyPack, action: int):
         # action == 0 -> skip
         if action == 0:
-            cf = self._best_counterfactual(pack)
+            cf = self._skip_counterfactual(pack)
             reward = self.reward_model.reward_for_skip(cf)
             return reward, {
                 "action": "skip",
