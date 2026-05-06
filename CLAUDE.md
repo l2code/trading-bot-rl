@@ -56,12 +56,29 @@ positive expected value that "always take" is genuinely the EV-
 optimal policy. The filter framing has no lift on this universe in
 this regime.
 
-### v2 (selector_v002) — pending verdict
+### v2 (selector_v002) — NO_GO on yfinance starter_equities
 
-Just launched 500k×3 on Kaggle (`crazypenguin/rl-swing-v002-
-selector-500k-3seeds`). Different action space (per-(symbol, date)
-selector among N strategies + skip) on the same candidate
-distribution. Verdict will follow when the run completes.
+500k×3 Kaggle run completed. Trained model **NO_GO** vs strongest
+selector baseline (4 of 5 improved, 1 material regression on
+max_drawdown +12pp) and NO_GO vs v1 trained (1 of 5 improved, 3
+material regressions). See
+`research/diary/2026-05-06_v002_selector_NO_GO.md`.
+
+Notable: v2 collapsed *differently* from v1 — to a "Momentum
+specialist" (`per_strategy_take_counts = [323, 0, 0]`) rather
+than "always take everything." Random selector across all 3
+strategies beats trained selector on composite score, which is
+the textbook entropy-collapse signature. Issue #8 (Optuna sweep
+on `ent_coef` and `learning_rate`) is the next experiment.
+
+### Cross-variant summary so far
+
+Both v1 and v2 collapse to degenerate policies under default PPO
+hyperparams on this candidate distribution. Different shapes,
+same wall. The framing alone (filter vs selector) does not unlock
+learning here. Open follow-ups: #8 (Optuna), #15 (Momentum-
+preference data analysis), #5 (multi-cycle WF), #4 (canonical
+replication on WRDS).
 
 ### Pluggable variant architecture — operational
 
