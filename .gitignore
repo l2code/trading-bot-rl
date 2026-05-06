@@ -15,6 +15,11 @@ htmlcov/
 .venv/
 venv/
 env/
+# IMPORTANT: ``env/`` above is meant for virtualenv folders, but we
+# also have a real Python package at ``src/rl_swing/rl/env/``. Re-
+# include it explicitly so git tracks it.
+!src/rl_swing/rl/env/
+!src/rl_swing/rl/env/**
 
 # Editor
 .vscode/
