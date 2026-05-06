@@ -74,6 +74,7 @@ def _materialize_kernel(
     experiment: str,
     total_timesteps: int | None,
     seeds: list[int] | None,
+    data_provider: str | None,
     repo_url: str,
     repo_branch: str,
 ) -> None:
@@ -98,6 +99,8 @@ def _materialize_kernel(
         overrides_block += f"_os.environ.setdefault('RL_SWING_TOTAL_TIMESTEPS', {str(total_timesteps)!r})\n"
     if seeds:
         overrides_block += f"_os.environ.setdefault('RL_SWING_SEEDS', {','.join(map(str, seeds))!r})\n"
+    if data_provider:
+        overrides_block += f"_os.environ.setdefault('RL_SWING_DATA_PROVIDER', {data_provider!r})\n"
     overrides_block += "# --- end injection ---\n"
 
     # Find the spot to insert: after the last consecutive ``from __future__``
@@ -182,6 +185,9 @@ def main() -> int:
     ap.add_argument("--total-timesteps", type=int, default=None)
     ap.add_argument("--seeds", type=str, default=None,
                     help="Comma-separated, e.g. 11,22,33")
+    ap.add_argument("--data-provider", type=str, default=None,
+                    help="Override the experiment's data provider, "
+                         "e.g. yfinance_daily, synthetic_momentum.")
     ap.add_argument("--repo-url", default="https://github.com/l2code/trading-bot-rl.git")
     ap.add_argument("--repo-branch", default="main")
     ap.add_argument("--slug", default=None,
@@ -212,6 +218,7 @@ def main() -> int:
         experiment=args.experiment,
         total_timesteps=args.total_timesteps,
         seeds=seeds,
+        data_provider=args.data_provider,
         repo_url=args.repo_url,
         repo_branch=args.repo_branch,
     )

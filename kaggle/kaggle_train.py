@@ -35,15 +35,16 @@ from pathlib import Path
 # ----------------------------------------------------------------------
 # 0) Config from env, with sensible defaults.
 # ----------------------------------------------------------------------
-EXPERIMENT  = os.environ.get(
+EXPERIMENT    = os.environ.get(
     "RL_SWING_EXPERIMENT", "configs/experiments/ppo_filter_smoke.yaml"
 )
-TOTAL_STEPS = os.environ.get("RL_SWING_TOTAL_TIMESTEPS")  # may be None
-SEEDS_RAW   = os.environ.get("RL_SWING_SEEDS")            # may be None
-REPO_URL    = os.environ.get(
+TOTAL_STEPS   = os.environ.get("RL_SWING_TOTAL_TIMESTEPS")  # may be None
+SEEDS_RAW     = os.environ.get("RL_SWING_SEEDS")            # may be None
+DATA_PROVIDER = os.environ.get("RL_SWING_DATA_PROVIDER")    # may be None
+REPO_URL      = os.environ.get(
     "RL_SWING_REPO_URL", "https://github.com/l2code/trading-bot-rl.git"
 )
-REPO_BRANCH = os.environ.get("RL_SWING_REPO_BRANCH", "main")
+REPO_BRANCH   = os.environ.get("RL_SWING_REPO_BRANCH", "main")
 WORKING     = Path("/kaggle/working")
 REPO_DIR    = WORKING / "trading-bot-rl"
 ARTIFACTS   = WORKING / "artifacts"
@@ -123,6 +124,7 @@ summary = train(
     experiment=EXPERIMENT,
     total_timesteps=int(TOTAL_STEPS) if TOTAL_STEPS else None,
     seeds=seeds,
+    data_provider=DATA_PROVIDER,
     artifact_root=str(ARTIFACTS),
 )
 elapsed = time.time() - t0
