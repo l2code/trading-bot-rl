@@ -55,14 +55,16 @@ Last update: 2026-05-06 after applying SDLC lessons (issue #1).
 
 | Variant | Tier | Verdict | Diary |
 |---------|------|---------|-------|
-| `filter_v001` (loose) | exploratory (yfinance) | **NO_GO (provisional)** | [`2026-05-06_v001_filter_loose_NO_GO.md`](../research/diary/2026-05-06_v001_filter_loose_NO_GO.md) |
-| `selector_v002` | exploratory (yfinance) | **NO_GO (provisional)** | [`2026-05-06_v002_selector_NO_GO.md`](../research/diary/2026-05-06_v002_selector_NO_GO.md) |
+| `filter_v001` (loose) | exploratory (yfinance) | **NO_GO (provisional, superseded)** | [`2026-05-06_v001_filter_loose_NO_GO.md`](../research/diary/2026-05-06_v001_filter_loose_NO_GO.md) |
+| `selector_v002` (pre-Phase-0) | exploratory (yfinance) | **NO_GO (provisional, superseded)** | [`2026-05-06_v002_selector_NO_GO.md`](../research/diary/2026-05-06_v002_selector_NO_GO.md) |
 | per-strategy training-EV analysis | exploratory (yfinance) | partial-H2 (provisional) | [`2026-05-06_per_strategy_training_ev.md`](../research/diary/2026-05-06_per_strategy_training_ev.md) |
+| `filter_v001` (post-Phase-0) | exploratory (yfinance) | **DRAFT_NO_GO** | [`2026-05-06_v001_filter_post_phase0_DRAFT_NO_GO.md`](../research/diary/2026-05-06_v001_filter_post_phase0_DRAFT_NO_GO.md) |
+| `selector_v002` (post-Phase-0) | exploratory (yfinance) | **DRAFT_NO_GO** | [`2026-05-06_v002_selector_post_phase0_DRAFT_NO_GO.md`](../research/diary/2026-05-06_v002_selector_post_phase0_DRAFT_NO_GO.md) |
 
-> All entries above are PROVISIONAL pending P1 simulator/evaluation
-> fixes [#22](https://github.com/l2code/trading-bot-rl/issues/22),
-> [#23](https://github.com/l2code/trading-bot-rl/issues/23),
-> [#24](https://github.com/l2code/trading-bot-rl/issues/24).
+> Phase 0 closed; pre-Phase-0 entries superseded. Post-Phase-0
+> entries are DRAFT_NO_GO with audit-bundle metrics. Audit-v2 and
+> phase0-final runs in flight; will replace numbers in place
+> (qualitative verdict won't change) and promote to FINAL.
 
 ## Roadmap progress
 
