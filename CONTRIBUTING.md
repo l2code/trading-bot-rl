@@ -237,7 +237,39 @@ land, the discipline is manual:** when you add a field to
 (`docs/experiment_schema.md` is itself filed as a follow-up — it
 doesn't yet exist.)
 
-## 11. Anti-patterns to actively defend against
+## 11. Append to the project changelog when you merge a finding
+
+`research/CHANGELOG.md` is the rolling project log: dated entries
+for each finding, decision, RFC outcome, run verdict, or
+substantive infrastructure change. CLAUDE.md is the **stable
+operating brief**, not a findings dump.
+
+**Rule:** when a PR closes a research issue, finishes an RFC, lands
+a substantive infrastructure change, or otherwise produces a
+durable finding, append an entry to `research/CHANGELOG.md` in the
+same PR. Do not add narrative findings to CLAUDE.md — only the
+single-line variant-status table updates.
+
+Entry format (mirrored at the top of `research/CHANGELOG.md`):
+
+```
+## YYYY-MM-DD — <KIND>: <one-line summary>
+
+**Issue/PR:** #N (link)
+**Diary:** research/diary/...md (if applicable)
+
+Two to five sentences of context.
+```
+
+Kinds: `RESEARCH`, `RFC`, `FEAT`, `FIX`, `OPS`, `STRUCTURAL`.
+
+**Why this rule exists:** CLAUDE.md was bloating with per-
+experiment narrative (v1 NO_GO details, v2 NO_GO details, per-
+strategy EV interpretation, ...). At three findings in two days,
+that file would be unreadable in a week. The changelog absorbs the
+chronology so CLAUDE.md stays focused on what's true *now*.
+
+## 12. Anti-patterns to actively defend against
 
 (See CLAUDE.md §7 for the full list distilled from the trading-bot2
 lessons. The most relevant on this repo today:)
@@ -250,6 +282,8 @@ lessons. The most relevant on this repo today:)
   cannot be GO.
 - **"Promising" hiding NO_GO** — see §4.
 - **Doc/config drift** — see §10.
+- **CLAUDE.md as findings dump** — narrative results go to the
+  changelog (§11), not the operating brief.
 - **`git add -A` without scrutiny** — was the cause of an
   accidental `__pycache__` commit on this repo. Always use targeted
   `git add <paths>` or audit `git status` before committing.

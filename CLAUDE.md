@@ -41,64 +41,40 @@ What this project explicitly does *not* yet optimize for:
 
 ---
 
-## 2. Current strategic state (as of 2026-05-06)
+## 2. Current strategic state
 
-### v1 (filter_v001) — NO_GO on yfinance starter_equities
+This section is a **stable snapshot** — one row per active variant.
+For findings, run results, RFC outcomes, and decisions, see
+`research/CHANGELOG.md`. For per-experiment artifacts see
+`research/diary/`.
 
-After three increasingly aggressive interventions (turnover penalty
-0.02 → 0.30, skip mirror 0 → 1.0, candidate threshold tightening
-relaxed to widen the pool 309 → 477), the trained PPO converges to
-"always take" — bit-identical to `baseline_always_take_100`. See
-`research/diary/v001_filter_loose_NO_GO.md` for the durable verdict.
+### Variant status (one line each)
 
-The candidate set produced by the strategy stage has so much
-positive expected value that "always take" is genuinely the EV-
-optimal policy. The filter framing has no lift on this universe in
-this regime.
+| Variant | Tier | Verdict | Latest |
+|---------|------|---------|--------|
+| `filter_v001` (loose) | exploratory (yfinance) | **NO_GO** | 2026-05-06 |
+| `selector_v002` | exploratory (yfinance) | **NO_GO** | 2026-05-06 |
 
-### v2 (selector_v002) — NO_GO on yfinance starter_equities
+Diary entries linked from `docs/scorecard.md`. Narrative findings
+live in `research/CHANGELOG.md` and the per-entry diary files —
+not here.
 
-500k×3 Kaggle run completed. Trained model **NO_GO** vs strongest
-selector baseline (4 of 5 improved, 1 material regression on
-max_drawdown +12pp) and NO_GO vs v1 trained (1 of 5 improved, 3
-material regressions). See
-`research/diary/2026-05-06_v002_selector_NO_GO.md`.
-
-Notable: v2 collapsed *differently* from v1 — to a "Momentum
-specialist" (`per_strategy_take_counts = [323, 0, 0]`) rather
-than "always take everything." Random selector across all 3
-strategies beats trained selector on composite score, which is
-the textbook entropy-collapse signature. Issue #8 (Optuna sweep
-on `ent_coef` and `learning_rate`) is the next experiment.
-
-### Cross-variant summary so far
-
-Both v1 and v2 collapse to degenerate policies under default PPO
-hyperparams on this candidate distribution. Different shapes,
-same wall. The framing alone (filter vs selector) does not unlock
-learning here.
-
-Per-strategy training-EV analysis (#15, completed) showed that
-v2's "Momentum specialist" collapse is **partially rational**:
-Momentum has the highest mean risk-adjusted return on training
-data (+0.327 vs Breakout +0.279 vs RSI +0.151), so preferring
-Momentum *first* makes sense. But specializing to *only*
-Momentum is irrational — Breakout has 85% of Momentum's EV
-across 8,411 candidates, so a portfolio policy that takes
-Momentum AND Breakout would dominate. That's the
-entropy-collapse component, isolated.
-
-Open follow-ups: #17 (take-all-fired baseline; bounds the EV
-the trained model leaves on the table), #8 (Optuna sweep with
-refined success criteria — does higher entropy diversify across
-strategies?), #5 (multi-cycle WF), #4 (canonical replication on
-WRDS).
-
-### Pluggable variant architecture — operational
+### Pluggable variant architecture
 
 `rl_swing.rl.variants.base.TrainingVariant` is the contract. v1 and
 v2 are registered in `configs/components/components.yaml` under
 `rl_variants`. Future variants are one file plus one registry line.
+
+### What's next (queued)
+
+- `#15` (closed): per-strategy training-EV analysis → PARTIAL-H2
+- `#17`: take_all_fired selector baseline (bounds residual EV)
+- `#8`: Optuna sweep on `ent_coef` + `lr` — refined success
+  criterion is "trained model's `per_strategy_take_counts` shows
+  diversification," not just "trained > baseline"
+
+The full roadmap and tracked structural debts live in §4 / §6 below
+(stable, not changelog material).
 
 ---
 
@@ -247,6 +223,10 @@ research diary entry.
 - `kaggle/` — kaggle-script kernel + metadata template.
 - `scripts/` — operational scripts (kaggle_run, future doc-drift
   check, future param-table audit).
+- `research/CHANGELOG.md` — rolling project log: dated entries
+  for findings, RFC outcomes, run verdicts, infra changes.
+  Append on merge per CONTRIBUTING.md §11. **This file, not
+  CLAUDE.md, is where narrative findings live.**
 - `research/diary/` — durable verdict artifacts. One per decision-
   bearing experiment cycle. Required sections per template.
 - `data/` — local cache and per-run kaggle dirs (gitignored where
