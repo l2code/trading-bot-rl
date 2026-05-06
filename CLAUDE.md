@@ -76,9 +76,23 @@ on `ent_coef` and `learning_rate`) is the next experiment.
 Both v1 and v2 collapse to degenerate policies under default PPO
 hyperparams on this candidate distribution. Different shapes,
 same wall. The framing alone (filter vs selector) does not unlock
-learning here. Open follow-ups: #8 (Optuna), #15 (Momentum-
-preference data analysis), #5 (multi-cycle WF), #4 (canonical
-replication on WRDS).
+learning here.
+
+Per-strategy training-EV analysis (#15, completed) showed that
+v2's "Momentum specialist" collapse is **partially rational**:
+Momentum has the highest mean risk-adjusted return on training
+data (+0.327 vs Breakout +0.279 vs RSI +0.151), so preferring
+Momentum *first* makes sense. But specializing to *only*
+Momentum is irrational — Breakout has 85% of Momentum's EV
+across 8,411 candidates, so a portfolio policy that takes
+Momentum AND Breakout would dominate. That's the
+entropy-collapse component, isolated.
+
+Open follow-ups: #17 (take-all-fired baseline; bounds the EV
+the trained model leaves on the table), #8 (Optuna sweep with
+refined success criteria — does higher entropy diversify across
+strategies?), #5 (multi-cycle WF), #4 (canonical replication on
+WRDS).
 
 ### Pluggable variant architecture — operational
 

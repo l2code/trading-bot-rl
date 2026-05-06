@@ -57,6 +57,7 @@ Last update: 2026-05-06 after applying SDLC lessons (issue #1).
 |---------|------|---------|-------|
 | `filter_v001` (loose) | exploratory (yfinance) | **NO_GO** | [`2026-05-06_v001_filter_loose_NO_GO.md`](../research/diary/2026-05-06_v001_filter_loose_NO_GO.md) |
 | `selector_v002` | exploratory (yfinance) | **NO_GO** | [`2026-05-06_v002_selector_NO_GO.md`](../research/diary/2026-05-06_v002_selector_NO_GO.md) |
+| per-strategy training-EV analysis | exploratory (yfinance) | partial-H2 (data) | [`2026-05-06_per_strategy_training_ev.md`](../research/diary/2026-05-06_per_strategy_training_ev.md) |
 
 ## Roadmap progress
 
