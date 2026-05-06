@@ -265,21 +265,48 @@ def train_from_experiment(
 
     # FIX-#53: write the top-level model.zip alias pointing at the
     # best checkpoint **across all seeds** (was per-seed, last-wins).
+    #
+    # FIX-#68: if no run has a valid best_validation_score (e.g.
+    # total_timesteps < eval_interval, or the run was interrupted
+    # before the first eval), fall back to aliasing from the
+    # lowest-seed run's best_path. The per-seed loop already falls
+    # back best.zip -> last.zip when no eval fires, so best_path
+    # always points at *something* trained. Log clearly that the
+    # alias was written without eval-time selection so this is
+    # visible in run logs (a downstream validate that finds the
+    # model can still be NO_GO; this is just plumbing).
     best_run = max(
         (r for r in summary["runs"] if r.get("best_validation_score") is not None),
         key=lambda r: r["best_validation_score"],
         default=None,
     )
+    fallback_used = False
+    if best_run is None and summary["runs"]:
+        best_run = min(
+            (r for r in summary["runs"] if r.get("best_path")),
+            key=lambda r: r["seed"],
+            default=None,
+        )
+        fallback_used = best_run is not None
     if best_run is not None and best_run.get("best_path"):
         alias = artifact_root / cfg.name / "model.zip"
         try:
             if alias.exists():
                 alias.unlink()
             alias.write_bytes(Path(best_run["best_path"]).read_bytes())
-            _log.info(
-                "Wrote model.zip alias from seed=%s (best_val=%.4f)",
-                best_run["seed"], best_run["best_validation_score"],
-            )
+            if fallback_used:
+                _log.warning(
+                    "FIX-#68 fallback: wrote model.zip alias from "
+                    "seed=%s last.zip (no eval fired across any seed). "
+                    "Downstream validate will find the model, but the "
+                    "alias was NOT chosen by validation score.",
+                    best_run["seed"],
+                )
+            else:
+                _log.info(
+                    "Wrote model.zip alias from seed=%s (best_val=%.4f)",
+                    best_run["seed"], best_run["best_validation_score"],
+                )
         except Exception as e:  # pragma: no cover
             _log.warning("failed to write model.zip alias: %s", e)
 
