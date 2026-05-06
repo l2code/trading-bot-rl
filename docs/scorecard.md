@@ -10,7 +10,7 @@ Last update: 2026-05-06 after applying SDLC lessons (issue #1).
 - **Pluggable variant architecture.** `TrainingVariant` + component
   registry means new variants are one new file plus one registry
   entry. v1 (filter) and v2 (selector) live side by side cleanly.
-- **Test discipline.** 230+ tests. Coverage floor 85%. Every
+- **Test discipline.** 242 tests today. Coverage floor 85%. Every
   variant ships with its own test module.
 - **Pure-function reward + cost models.** `RewardModel` and
   `EquityExecutionModel` are stateless dataclasses; they run
@@ -49,6 +49,7 @@ Last update: 2026-05-06 after applying SDLC lessons (issue #1).
 | 4 | No doc-as-code drift script for experiment YAMLs | [#9](https://github.com/l2code/trading-bot-rl/issues/9) | medium |
 | 5 | No issue templates pre-populated until #1 closes | [#1](https://github.com/l2code/trading-bot-rl/issues/1) | low (closing) |
 | 6 | No champion/challenger promotion gate | not filed yet | medium (becomes urgent at first GO) |
+| 7 | Acceptance gate module exists ([#6](https://github.com/l2code/trading-bot-rl/issues/6)) but isn't wired into walk_forward output yet | follow-up filed | low (gate is callable; just not auto-applied) |
 
 ## Research state
 

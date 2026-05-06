@@ -122,6 +122,10 @@ lesson §2.2): local verification is faster and more reliable for
 a small team. CI is the catch-net for things you forgot to run
 locally, not the primary gate.
 
+> **Note:** pre-commit hooks for ruff and the doc-drift check are
+> *planned* (#9) but not yet wired in. Until they are, "ran
+> ruff/pytest locally" is enforced by convention, not tooling.
+
 ## 7. Coherent batches over noisy fragments
 
 Group related changes into one issue-sized commit. Five PRs of 10
@@ -153,9 +157,11 @@ must stay in sync. Adding a new config field without adding it to
 the YAML schema or documentation is forbidden.
 
 A `scripts/check_param_doc_drift.py` script is filed (#9) to
-enforce this in pre-commit. Until it lands, the discipline is
-manual: when you add a field to `_ExperimentCfg`, you also update
-every existing experiment YAML and `docs/experiment_schema.md`.
+enforce this in pre-commit. **Until both #9 and pre-commit setup
+land, the discipline is manual:** when you add a field to
+`_ExperimentCfg`, you also update every existing experiment YAML.
+(`docs/experiment_schema.md` is itself filed as a follow-up — it
+doesn't yet exist.)
 
 ## 10. Anti-patterns to actively defend against
 

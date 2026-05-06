@@ -30,9 +30,8 @@ kwarg so we can A/B against tighter (3-of-5) once we have evidence.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Literal
-
 
 Verdict = Literal["GO", "SHADOW_ONLY", "NO_GO"]
 
@@ -63,8 +62,16 @@ DEFAULT_METRICS: tuple[MetricSpec, ...] = (
                material_regression_threshold=0.3),     # >0.3 PF loss is material
     MetricSpec("max_drawdown", higher_is_better=False,
                material_regression_threshold=0.05),    # >5pp drawdown increase is material
+    # NOTE: turnover_take_rate's "right direction" is genuinely
+    # debatable — for a *filter* variant lower take-rate (more
+    # selectivity) is often the point; for a *selector* it's near-
+    # neutral. We mark it higher_is_better=True to match the current
+    # composite-score convention, with a deliberately loose material-
+    # regression threshold so it can't gate by itself. Tracked: a
+    # follow-up RFC will pick a robust 5th metric (win_rate or
+    # cost_drag_bps) without this ambiguity.
     MetricSpec("turnover_take_rate", higher_is_better=True,
-               material_regression_threshold=0.2),     # informational; lenient
+               material_regression_threshold=0.5),     # informational; near-impossible to materially regress
 )
 
 

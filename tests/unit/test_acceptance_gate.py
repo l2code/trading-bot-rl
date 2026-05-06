@@ -4,16 +4,12 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from rl_swing.rl.validation.acceptance_gate import (
     DEFAULT_METRICS,
-    MetricSpec,
     evaluate_gate,
 )
-
 
 # A clearly worse baseline for clean improvement counting.
 BASE = {

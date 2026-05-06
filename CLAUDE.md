@@ -28,7 +28,7 @@ function, in priority order:
 3. **Reproducibility.** Same experiment YAML + same seed = same
    numbers, every time. Kaggle and local must agree to the bit on
    smoke runs.
-4. **Test discipline.** 230+ tests today; coverage floor is 85%.
+4. **Test discipline.** 242 tests today; coverage floor is 85%.
    Every new variant ships with its own test module.
 
 What this project explicitly does *not* yet optimize for:

@@ -51,8 +51,11 @@ the loose-candidate + symmetric-mirror reward changes?
 
 ## Headline metrics (Phase-24 5-vector)
 
-Test window 2022-01-01..2022-12-31, vs strongest baseline
-(`baseline_always_take_100`):
+Test window 2022-01-01..2022-12-31. Comparison against the
+**strongest baseline** by validation_composite_score, which on
+this test window is `baseline_always_take_100` (score 0.6907).
+`baseline_random` scores 0.6672 (a much weaker bar) and
+`baseline_never_take` scores 0.3250 (trivially weak).
 
 | Metric              | Trained PPO | Baseline | Delta | Improved? |
 |---------------------|-------------|----------|-------|-----------|
