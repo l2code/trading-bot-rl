@@ -29,6 +29,43 @@ codifies the rule.
 
 ---
 
+## 2026-05-06 (evening) — RESEARCH: Phase 0 closure DRAFT — both variants NO_GO under default PPO hyperparams
+
+**Issues:** [#2](https://github.com/l2code/trading-bot-rl/issues/2), [#3](https://github.com/l2code/trading-bot-rl/issues/3)
+**PRs:** all FIX-#22 through #62 merged
+**Diaries:** [`2026-05-06_v001_filter_post_phase0_DRAFT_NO_GO.md`](diary/2026-05-06_v001_filter_post_phase0_DRAFT_NO_GO.md), [`2026-05-06_v002_selector_post_phase0_DRAFT_NO_GO.md`](diary/2026-05-06_v002_selector_post_phase0_DRAFT_NO_GO.md)
+
+After all 16 P1+P2 simulator/evaluation fixes from two operator
+audits + one parallel pass were merged, both v1 and v2 were
+re-trained on Kaggle (audit-bundle commit `eb32fba`). The
+qualitative verdict is **NO_GO for both** under default PPO
+hyperparams.
+
+- **v1 collapse:** trained PPO is bit-identical to
+  `baseline_always_take_100` (same trades, returns, sharpe, DD).
+  Loses to `baseline_always_take_50` and `baseline_random` on
+  the gate (material DD regression).
+- **v2 collapse:** trained PPO is bit-identical to
+  `selector_baseline_always_skip` (n_trades=0). Material
+  regression on every metric vs `selector_baseline_random`. The
+  collapse is a structural action-space issue (illegal-action
+  penalty + low ent_coef), not reward calibration — wants action
+  masking (#29 MaskablePPO).
+
+The audit-v2 / phase0-final runs (still in flight) refine metrics
+slightly via FIX-#56 / #57 / #61 / #62 but do not change the
+qualitative verdict. Diary entries are DRAFT until those land
+and we replace numbers in place.
+
+**Phase 1 implications:** the diagnoses point hard at the next
+moves. (1) #29 MaskablePPO directly targets v2's structural
+collapse mode. (2) #30 supervised baseline tells us whether the
+features have discriminating signal at all without RL exploration
+noise. (3) #8 Optuna sweep tests whether v1's instant collapse to
+always-take_100 is fixable via entropy/lr. Operator-blessed
+sequence: #29 first, #30 second, #8 third. Do not burn more PPO
+run budget on v1 default-hyperparam or v2 without masking.
+
 ## 2026-05-06 — OPS: CI switched to workflow_dispatch only (manual-only)
 
 **Issue:** [#45](https://github.com/l2code/trading-bot-rl/issues/45)
