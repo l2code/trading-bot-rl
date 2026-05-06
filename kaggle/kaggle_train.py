@@ -67,9 +67,30 @@ if REPO_DIR.exists():
 _run(["git", "clone", "--depth=1", "-b", REPO_BRANCH, REPO_URL, str(REPO_DIR)])
 os.chdir(REPO_DIR)
 
-# Quiet pip install. Kaggle has most of our deps preinstalled (numpy,
-# pandas, torch, scikit-learn, gymnasium-ish). Just install the package.
-_run([sys.executable, "-m", "pip", "install", "-q", "."])
+# Don't ``pip install .`` — Kaggle's pip flow has been observed to leave
+# subpackages off the install path (we hit ``ModuleNotFoundError: No
+# module named 'rl_swing.rl.env'`` despite the built wheel containing
+# it). Easier and more reliable: add the src directory to sys.path
+# directly. Kaggle's base image already has every runtime dep we need
+# (numpy, pandas, torch, sklearn, gymnasium, click, pyyaml, pyarrow,
+# yfinance), and we install stable-baselines3 below if it's missing.
+sys.path.insert(0, str(REPO_DIR / "src"))
+
+
+def _ensure(import_name: str, pip_name: str | None = None) -> None:
+    try:
+        __import__(import_name)
+    except ImportError:
+        pkg = pip_name or import_name
+        print(f"[kaggle_train] installing missing {pkg}")
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-q", pkg],
+            check=False,
+        )
+
+
+_ensure("stable_baselines3")
+_ensure("gymnasium")
 
 
 # ----------------------------------------------------------------------
