@@ -243,6 +243,37 @@ class MultiStrategySwingTradingEnv(gym.Env):
             "fired_mask": self.observation_builder.fired_mask(first_pack).tolist(),
         }
 
+    # ---- action masking (FEAT-29) -------------------------------
+    def action_masks(self) -> np.ndarray:
+        """Boolean mask over the Discrete(N+1) action space.
+
+        FEAT-29: returned to ``sb3-contrib.MaskablePPO`` so the policy
+        cannot select non-fired strategy slots. The contract is:
+
+        - index 0 (skip) is **always** True; skipping is always legal.
+        - indices 1..N are True iff the strategy at that slot fired
+          on the *current* pack (i.e. ``pack.candidates[k-1] is not
+          None``).
+
+        Vanilla PPO/DQN ignore this method, so exposing it on the env
+        is harmless for the unmasked v002 variant — the masking only
+        engages when the trainer wires the env to MaskablePPO.
+
+        Edge case: when there is no current pack (between episodes,
+        or if reset returned an empty episode), the mask is all-True
+        — sb3-contrib never asks for masks outside an active step,
+        but we return something defined just in case.
+        """
+        if not self._episode_packs or self._idx >= len(self._episode_packs):
+            return np.ones(1 + self.n_strategies, dtype=bool)
+        pack = self._episode_packs[self._idx]
+        mask = np.zeros(1 + self.n_strategies, dtype=bool)
+        mask[0] = True  # skip is always legal
+        for k in range(self.n_strategies):
+            if k < len(pack.candidates) and pack.candidates[k] is not None:
+                mask[1 + k] = True
+        return mask
+
     def step(self, action: int):
         if not self._episode_packs:
             return (

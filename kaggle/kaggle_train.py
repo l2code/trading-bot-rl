@@ -102,6 +102,10 @@ def _ensure(import_name: str, pip_name: str | None = None) -> None:
 
 _ensure("stable_baselines3")
 _ensure("gymnasium")
+# FEAT-29: MaskablePPO + MaskableEvalCallback live in sb3-contrib.
+# Required by the selector_v002_masked variant; harmless for v1 / v2
+# (the import is lazy on the variant + scorer side).
+_ensure("sb3_contrib", "sb3-contrib")
 
 # Diagnostic: prove which rl_swing tree Python is actually using.
 # These imports are deliberately late — they must come AFTER the

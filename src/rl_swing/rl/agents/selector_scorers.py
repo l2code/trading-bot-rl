@@ -168,3 +168,82 @@ class PpoSelectorScorer:
         if raw > 0 and pack.candidates[raw - 1] is None:
             return 0
         return raw
+
+
+# ---------------------------------------------------------------------
+@dataclass
+class MaskablePpoSelectorScorer:
+    """sb3-contrib MaskablePPO loaded from a saved artifact (FEAT-29).
+
+    Identical observation shape and action space as ``PpoSelectorScorer``
+    — the only change is that ``predict()`` is given an action mask
+    so the policy literally cannot select a non-fired strategy slot.
+
+    Lazy-loaded so importing this module doesn't require sb3-contrib
+    in environments where only baseline scorers are used.
+    """
+    model_id: str
+    artifact_path: str
+    n_strategies: int
+    feature_version: str = "features_v001_core_daily"
+    feature_names: tuple[str, ...] = ALL_FEATURE_NAMES
+
+    def __post_init__(self) -> None:
+        self._model = None
+        self._lock = threading.Lock()
+        self._obs_builder = MultiStrategyObservationBuilder(
+            feature_names=self.feature_names,
+            n_strategies=self.n_strategies,
+        )
+
+    def _load(self):
+        if self._model is not None:
+            return self._model
+        path = Path(self.artifact_path)
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Masked selector model artifact not found: {self.artifact_path}."
+            )
+        from sb3_contrib import MaskablePPO  # type: ignore[import-not-found]
+        self._model = MaskablePPO.load(str(path))
+        return self._model
+
+    @staticmethod
+    def _action_mask_for_pack(pack: StrategyPack, n_strategies: int) -> np.ndarray:
+        """Mirror of ``MultiStrategySwingTradingEnv.action_masks`` for
+        inference time. Skip always legal; strategy slot k legal iff
+        that slot fired on this pack."""
+        mask = np.zeros(1 + n_strategies, dtype=bool)
+        mask[0] = True
+        for k in range(n_strategies):
+            if k < len(pack.candidates) and pack.candidates[k] is not None:
+                mask[1 + k] = True
+        return mask
+
+    def select(self, pack, feature, portfolio_state) -> int:
+        if feature.feature_version != self.feature_version:
+            raise RuntimeError(
+                f"Feature version mismatch: model trained on "
+                f"{self.feature_version!r}, frame is "
+                f"{feature.feature_version!r}."
+            )
+        obs = self._obs_builder.build(pack, feature, portfolio_state)
+        mask = self._action_mask_for_pack(pack, self.n_strategies)
+        with self._lock:
+            model = self._load()
+            action, _state = model.predict(
+                obs, deterministic=True, action_masks=mask,
+            )
+        try:
+            raw = int(np.asarray(action).reshape(-1)[0])
+        except Exception:
+            raw = int(action)  # type: ignore[arg-type]
+        # Defensive bounds check; the mask should already prevent any
+        # of these branches from triggering, but a corrupted artifact
+        # or shape mismatch should fail loudly to skip rather than
+        # crash an entire eval run.
+        if raw < 0 or raw > self.n_strategies:
+            return 0
+        if raw > 0 and pack.candidates[raw - 1] is None:
+            return 0
+        return raw
