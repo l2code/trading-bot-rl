@@ -310,6 +310,38 @@ def test_execution_simulator_cost_reduces_return():
     assert with_cost.return_pct < no_cost.return_pct
 
 
+def test_execution_simulator_return_scales_with_size_pct():
+    """FIX-22: size_pct must scale realized portfolio return.
+
+    Two trades on the same bars with the same atr/cost differ ONLY in
+    size. The 100%-sized trade's portfolio contribution must be ~10x
+    the 10%-sized trade's, since size_pct linearly scales the
+    portfolio-level return.
+
+    Regression: prior to FIX-22, the simulator returned the asset's
+    standalone percent return as ``return_pct`` regardless of size,
+    so take_25 vs take_100 produced indistinguishable rewards and
+    the agent never learned position sizing.
+    """
+    bars = _bars_linear(20, slope=0.02)
+    sim = ExecutionSimulator(atr_target_mult=10.0, atr_stop_mult=10.0)
+    small = sim.simulate(bars=bars, entry_index=0, size_pct=0.10,
+                         max_holding_days=20, cost_bps=0, atr_pct=0.02)
+    large = sim.simulate(bars=bars, entry_index=0, size_pct=1.00,
+                         max_holding_days=20, cost_bps=0, atr_pct=0.02)
+    assert small is not None and large is not None
+    # Asset return must be identical (same bars, same exit).
+    assert small.asset_return_pct == large.asset_return_pct
+    # Portfolio return must scale ~linearly with size_pct
+    # (with cost_bps=0 the ratio is exactly 10).
+    assert abs(large.return_pct - 10.0 * small.return_pct) < 1e-9
+    # Sanity: size_pct field reflects what was passed in.
+    assert small.size_pct == 0.10
+    assert large.size_pct == 1.00
+    # Backward compat: raw_return_pct aliases asset_return_pct.
+    assert small.raw_return_pct == small.asset_return_pct
+
+
 # --- reward model --------------------------------------------------------
 def test_reward_take_winner_positive():
     rm = RewardModel()
@@ -328,6 +360,7 @@ def test_reward_take_clipping_protects_extremes():
         symbol="X", entry_timestamp=datetime(2024, 1, 1),
         exit_timestamp=datetime(2024, 1, 2), entry_price=100, exit_price=200,
         qty=10, notional=1000, return_pct=1.0, raw_return_pct=1.0,
+        asset_return_pct=1.0, size_pct=1.0,
         holding_days=1, peak_drawdown_pct=0.0, exit_reason="target", cost_bps=0,
     )
     r = rm.reward_for_take(big_winner, max_holding_days=10)
@@ -355,12 +388,14 @@ def test_reward_skip_mirrors_take_on_risk_adjusted_scale():
         symbol="X", entry_timestamp=datetime(2024, 1, 1),
         exit_timestamp=datetime(2024, 1, 2), entry_price=100, exit_price=110,
         qty=10, notional=1000, return_pct=0.10, raw_return_pct=0.10,
+        asset_return_pct=0.10, size_pct=1.0,
         holding_days=1, peak_drawdown_pct=0.0, exit_reason="target", cost_bps=0,
     )
     loser = TradeOutcome(
         symbol="X", entry_timestamp=datetime(2024, 1, 1),
         exit_timestamp=datetime(2024, 1, 2), entry_price=100, exit_price=90,
         qty=10, notional=1000, return_pct=-0.10, raw_return_pct=-0.10,
+        asset_return_pct=-0.10, size_pct=1.0,
         holding_days=1, peak_drawdown_pct=0.10, exit_reason="stop", cost_bps=0,
     )
     # +10% / 2% = +5 risk-adjusted; clipped at 5; skip mirrors → -5.
@@ -381,6 +416,7 @@ def test_reward_skip_scale_dampens_mirror():
         symbol="X", entry_timestamp=datetime(2024, 1, 1),
         exit_timestamp=datetime(2024, 1, 2), entry_price=100, exit_price=101,
         qty=10, notional=1000, return_pct=0.01, raw_return_pct=0.01,
+        asset_return_pct=0.01, size_pct=1.0,
         holding_days=1, peak_drawdown_pct=0.0, exit_reason="target", cost_bps=0,
     )
     # +1% / 2% = +0.5; mirrored × 0.5 = -0.25.

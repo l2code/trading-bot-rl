@@ -12,15 +12,29 @@ at the close of the final day at horizon.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Sequence
 
 from rl_swing.domain import MarketBar
 
 
 @dataclass(frozen=True)
 class TradeOutcome:
+    """Outcome of one trade.
+
+    ``return_pct`` is the **portfolio-contribution** percent return —
+    i.e., it's already scaled by ``size_pct`` and net of ``cost_bps``.
+    A trade with size_pct=0.10 and a +10% asset move yields
+    return_pct ≈ +0.01 (1% portfolio contribution), not +0.10.
+
+    ``asset_return_pct`` is the underlying asset's standalone percent
+    return for the same holding period, BEFORE any sizing or cost
+    adjustment. Use it when you need the asset's own price action.
+
+    ``raw_return_pct`` is preserved for backward compatibility — it
+    aliases to ``asset_return_pct`` (size-unaware, cost-unaware).
+    """
     symbol: str
     entry_timestamp: datetime
     exit_timestamp: datetime
@@ -28,8 +42,10 @@ class TradeOutcome:
     exit_price: float
     qty: float
     notional: float
-    return_pct: float           # net of cost (passed in by env)
-    raw_return_pct: float       # before cost
+    return_pct: float           # portfolio contribution, sized + net of cost
+    raw_return_pct: float       # asset return, before sizing or cost (alias of asset_return_pct)
+    asset_return_pct: float     # asset return, before sizing or cost
+    size_pct: float             # the size_pct the trade was simulated with
     holding_days: int
     peak_drawdown_pct: float
     exit_reason: str            # "stop" | "target" | "time" | "no_data"
@@ -108,8 +124,13 @@ class ExecutionSimulator:
         if exit_reason == "time":
             exit_price = last_close
 
-        raw_return = (exit_price - entry_price) / entry_price
-        net_return = raw_return - cost_bps / 10_000.0
+        asset_return = (exit_price - entry_price) / entry_price
+        # Portfolio contribution = sized asset return, net of cost.
+        # cost_bps is a per-portfolio bps charge (i.e. it's already
+        # scaled to the notional that was put on; see #23 for the
+        # round-trip-vs-per-side debate which is a separate concern).
+        cost_drag = cost_bps / 10_000.0
+        net_return = float(size_pct) * asset_return - cost_drag * float(size_pct)
         holding_days = max(1, (exit_ts - entry_bar.timestamp).days or 1)
 
         return TradeOutcome(
@@ -121,7 +142,9 @@ class ExecutionSimulator:
             qty=qty,
             notional=notional,
             return_pct=net_return,
-            raw_return_pct=raw_return,
+            raw_return_pct=asset_return,    # alias for backward compat
+            asset_return_pct=asset_return,
+            size_pct=float(size_pct),
             holding_days=holding_days,
             peak_drawdown_pct=peak_dd,
             exit_reason=exit_reason,
