@@ -28,7 +28,7 @@ function, in priority order:
 3. **Reproducibility.** Same experiment YAML + same seed = same
    numbers, every time. Kaggle and local must agree to the bit on
    smoke runs.
-4. **Test discipline.** 246 tests today; coverage floor is 85%.
+4. **Test discipline.** 267 tests today; coverage floor is 85%.
    Every new variant ships with its own test module.
 
 What this project explicitly does *not* yet optimize for:
@@ -52,15 +52,17 @@ For findings, run results, RFC outcomes, and decisions, see
 
 | Variant | Tier | Verdict | Latest |
 |---------|------|---------|--------|
-| `filter_v001` | exploratory (yfinance) | **DRAFT_NO_GO (post-Phase-0)** | 2026-05-06 |
-| `selector_v002` | exploratory (yfinance) | **DRAFT_NO_GO (post-Phase-0)** | 2026-05-06 |
+| `filter_v001` | exploratory (yfinance) | **FINAL_NO_GO (post-Phase-0)** | 2026-05-06 |
+| `selector_v002` | exploratory (yfinance) | **FINAL_NO_GO (post-Phase-0)** | 2026-05-06 |
 
-> **Phase 0 closed** — all 16 P1+P2 simulator/evaluation fixes
-> merged. Both variants verified DRAFT_NO_GO with corrected
-> metrics. v1 collapses to `always_take_100`; v2 collapses to
-> `always_skip`. Promoting to FINAL_NO_GO after the in-flight
-> audit-v2 / phase0-final Kaggle runs land (numbers will refine
-> slightly; verdict is stable). See diary entries for details.
+> **Phase 0 fully closed** — all 16 P1+P2 simulator/evaluation
+> fixes plus FIX-AUDIT-V2 (#56–#59) and FIX-AUDIT-V3 (#61, #62)
+> merged. Audit-v2 / phase0-final Kaggle runs landed; both
+> variants are FINAL_NO_GO with corrected daily-P&L metrics. v1
+> trained PPO is bit-identical to `baseline_always_take_100`
+> (material-DD regression caps verdict). v2 trained PPO is
+> bit-identical to `selector_baseline_always_skip` (3-metric
+> material regression). See diary entries for details.
 
 > **Phase 1 leads with #29 MaskablePPO for v2** — the v2 collapse
 > is a structural action-space issue (illegal-action penalty

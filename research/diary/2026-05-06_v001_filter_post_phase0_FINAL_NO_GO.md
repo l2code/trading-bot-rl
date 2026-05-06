@@ -1,23 +1,21 @@
 # RESEARCH-001b — v001 filter on yfinance starter_equities (post-Phase-0)
 
-> **DRAFT_NO_GO** as of 2026-05-06 evening. Phase 0 simulator/eval
-> fixes (#22 #23 #24 #26 #36 #49 #50 #51 #52 #53 #54 #56 #57 #58 #59
-> #61 #62) are merged. Audit-bundle re-run completed; audit-v2 and
-> phase0-final re-runs still in flight on Kaggle. Numbers below are
-> from the audit-bundle run; the audit-v2 / phase0-final refinements
-> (#56 idle-day window, #57 trading-day calendar) will shift these
-> slightly but **will not change the qualitative verdict** — the
-> collapse mode and the gate output are stable across the
-> remaining metric refinements. This entry promotes from DRAFT to
-> FINAL once those runs land and we replace the numbers in place.
+> **FINAL_NO_GO** as of 2026-05-06. Phase 0 simulator/eval fixes
+> (#22 #23 #24 #26 #36 #49 #50 #51 #52 #53 #54 #56 #57 #58 #59 #61
+> #62) are merged. Audit-bundle, audit-v2, and phase0-final re-runs
+> all completed on Kaggle. Numbers below are from `audit-v2` /
+> `phase0-final` (which produced bit-identical baselines and trained
+> metrics — daily-P&L is now stable across the metric-refinement
+> stack). The qualitative verdict — bit-identical convergence to
+> `baseline_always_take_100` and a material-DD regression on the
+> Phase-24 gate — is unchanged from the audit-bundle DRAFT.
 
 **Date:** 2026-05-06
-**Verdict:** **NO_GO** (draft — qualitative verdict stable; numbers pending final runs)
-**Issue:** [#2](https://github.com/l2code/trading-bot-rl/issues/2) (PROVISIONAL banner from previous entry will be lifted by FINAL)
+**Verdict:** **NO_GO** (final)
+**Issue:** [#2](https://github.com/l2code/trading-bot-rl/issues/2) (PROVISIONAL banner on the predecessor entry is lifted by this FINAL)
 **Variant:** `filter_v001`
-**Run (audit-bundle):** Kaggle `crazypenguin/rl-swing-v001-rerun-audit-bundle`
-**Trainer commit at run time:** `eb32fba` (FIX-AUDIT-BUNDLE).
-**Final-state metrics will use:** `crazypenguin/rl-swing-v001-rerun-audit-v2` or `…-phase0-final` once they complete.
+**Runs:** Kaggle `crazypenguin/rl-swing-v001-rerun-audit-v2` (final), `…-phase0-final` (cross-check, identical numbers), `…-rerun-audit-bundle` (DRAFT predecessor, superseded).
+**Trainer commits:** `eb32fba` (FIX-AUDIT-BUNDLE) for the bundle run; audit-v2 / phase0-final runs include the additional FIX-AUDIT-V2 (#56–#59) and FIX-AUDIT-V3 (#61, #62) fixes.
 
 ---
 
@@ -72,36 +70,39 @@ All 16 P1+P2 fixes from the operator's audits + my parallel passes:
   Breakout (≥0.7× rel-vol, dist_high≥-0.02). Aggregated via
   `StrategyAggregator`.
 
-## Headline metrics — audit-bundle
+## Headline metrics — audit-v2 / phase0-final
 
 Test window 2022-01-01..2022-12-31. Comparison against the
-**strongest baseline** by `validation_composite_score`:
+**strongest baseline** by `validation_composite_score` (daily-P&L
+basis, FIX-#36):
 
 | model_id                        | score   | n_trades | take_rate | total_return | sharpe | max_DD |
 |---------------------------------|--------:|---------:|----------:|-------------:|-------:|-------:|
-| `baseline_random` (strongest)   | 0.7341  | 1349     | 0.754     | +1.36        | +7.00  | 0.094  |
-| `baseline_always_take_50`       | 0.7190  | 1780     | 0.996     | +1.37        | +6.92  | 0.104  |
-| `baseline_always_take_100`      | 0.6906  | 1780     | 0.996     | +4.55        | +6.92  | 0.199  |
+| `baseline_random` (strongest)   | 0.7352  | 1349     | 0.7545    | +1.3566      | +7.560 | 0.0904 |
+| `baseline_always_take_50`       | 0.7193  | 1780     | 0.9955    | +1.3674      | +7.352 | 0.1032 |
+| `baseline_always_take_100`      | 0.6910  | 1780     | 0.9955    | +4.5134      | +7.351 | 0.1975 |
 | `baseline_never_take`           | 0.3250  | 0        | 0         | 0            | 0      | 0      |
-| **`ppo_filter_v001` (trained)** | **0.6906** | **1780** | **0.996** | **+4.55** | **+6.92** | **0.199** |
+| **`ppo_filter_v001` (trained)** | **0.6910** | **1780** | **0.9955** | **+4.5134** | **+7.351** | **0.1975** |
 
 The trained PPO is **bit-identical to `baseline_always_take_100`** —
-same trade count, same take rate, same return to 4 decimals,
-same Sharpe and DD. Eval-history confirms convergence to "always
-take_100" at step 50,000 (first checkpoint) and zero variance
-through step 500,000 across all 3 seeds. No discrimination.
+same trade count, same take rate, same return to 4 decimals, same
+Sharpe and DD. Cost-2× columns (in the full validation_summary)
+confirm the equivalence holds under cost stress as well. Eval-
+history confirms convergence to "always take_100" at step 50,000
+(first checkpoint) and zero variance through step 500,000 across
+all 3 seeds. No discrimination.
 
 ## Gate output
 
-vs **strongest baseline (`baseline_random`, score 0.7341)**:
+vs **strongest baseline (`baseline_random`, score 0.7352)**:
 
-| Metric              | Trained | Baseline | Δ      | Status |
-|---------------------|--------:|---------:|-------:|--------|
-| total_return        | +4.55   | +1.36    | +3.19  | ✓ improved |
-| annualized_sharpe   | +6.92   | +7.00    | -0.08  | small regression (within threshold) |
-| profit_factor       | (high)  | (high)   | ≈      | ≈ |
-| max_drawdown        | 0.199   | 0.094    | +0.105 | **✗ MATERIAL regression** (>0.05 threshold) |
-| turnover_take_rate  | 0.996   | 0.754    | +0.24  | ✓ improved (informational) |
+| Metric              | Trained | Baseline | Δ       | Status |
+|---------------------|--------:|---------:|--------:|--------|
+| total_return        | +4.5134 | +1.3566  | +3.1568 | ✓ improved |
+| annualized_sharpe   | +7.351  | +7.560   | -0.209  | small regression (within threshold) |
+| profit_factor       | 3.43    | 3.49     | -0.06   | ≈ (within threshold) |
+| max_drawdown        | 0.1975  | 0.0904   | +0.1071 | **✗ MATERIAL regression** (>0.05 threshold) |
+| turnover_take_rate  | 0.9955  | 0.7545   | +0.241  | ✓ improved (informational) |
 
 **Material regression on max_drawdown caps verdict at NO_GO** per
 the Phase-24 gate. Multiple metrics improve, but the gate
@@ -176,7 +177,8 @@ for v2 first; #30 supervised baseline second; v1 Optuna third.
 
 ## Cross-references
 
-- Predecessor (PROVISIONAL): `2026-05-06_v001_filter_loose_NO_GO.md`
-- Sibling: `2026-05-06_v002_selector_post_phase0_DRAFT_NO_GO.md`
+- Predecessor (PROVISIONAL, banner lifted by this FINAL): `2026-05-06_v001_filter_loose_NO_GO.md`
+- DRAFT predecessor (superseded by this FINAL, audit-bundle numbers): the prior `…_post_phase0_DRAFT_NO_GO.md` was renamed in place to `…_post_phase0_FINAL_NO_GO.md` (this file).
+- Sibling: `2026-05-06_v002_selector_post_phase0_FINAL_NO_GO.md`
 - Roadmap: CLAUDE.md §4
 - Operator audit chats: 2026-05-06 (Phase 0 fixes + Next Stage framing)
