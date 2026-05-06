@@ -259,6 +259,26 @@ def train_from_experiment(
         )
         summary["runs"].append(run_summary)
 
+    # FIX-#53: write the top-level model.zip alias pointing at the
+    # best checkpoint **across all seeds** (was per-seed, last-wins).
+    best_run = max(
+        (r for r in summary["runs"] if r.get("best_validation_score") is not None),
+        key=lambda r: r["best_validation_score"],
+        default=None,
+    )
+    if best_run is not None and best_run.get("best_path"):
+        alias = artifact_root / cfg.name / "model.zip"
+        try:
+            if alias.exists():
+                alias.unlink()
+            alias.write_bytes(Path(best_run["best_path"]).read_bytes())
+            _log.info(
+                "Wrote model.zip alias from seed=%s (best_val=%.4f)",
+                best_run["seed"], best_run["best_validation_score"],
+            )
+        except Exception as e:  # pragma: no cover
+            _log.warning("failed to write model.zip alias: %s", e)
+
     summary_path = artifact_root / cfg.name / "training_summary.json"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     with open(summary_path, "w", encoding="utf-8") as f:
@@ -400,30 +420,36 @@ def _run_single_seed(
     with open(out_dir / "metadata.json", "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2, default=str)
 
-    # Also write a top-level model.zip alias pointing at the best
-    # checkpoint, which is what the registry/scorer adapters expect.
-    alias = artifact_root / cfg.name / "model.zip"
-    try:
-        if alias.exists():
-            alias.unlink()
-        alias.write_bytes(best_path.read_bytes())
-    except Exception as e:  # pragma: no cover
-        _log.warning("failed to write model.zip alias: %s", e)
+    # FIX-#53: do NOT write the top-level model.zip alias here.
+    # In a multi-seed run, each seed would overwrite the alias with
+    # its own best checkpoint, leaving the LAST seed's model on
+    # disk — not the best across seeds. The alias is now written by
+    # train_from_experiment after all seeds finish, picking the
+    # global best by best_validation_score.
 
     return metadata
 
 
 # ---------------------------------------------------------------------
 def _evaluate(model, env) -> tuple[float, dict]:
-    """One full pass through the chronological validation env."""
-    from rl_swing.rl.validation.metrics import validation_composite_score
+    """One full pass through the chronological validation env.
+
+    FIX-#51: scores against the SAME metric the walk-forward report
+    uses (``validation_composite_score_from_daily_pnl``). Pre-FIX-#51
+    this used the legacy per-trade ``validation_composite_score``,
+    so ``best.zip`` could be selected by a metric the final report
+    no longer trusts. Now the entire training-time selection +
+    final report agree.
+    """
+    from rl_swing.rl.validation.metrics import (
+        validation_composite_score_from_daily_pnl,
+    )
+    from rl_swing.rl.validation.portfolio_pnl import TradeRecord
 
     obs, _ = env.reset()
     rewards: list[float] = []
-    raw_returns: list[float] = []
-    cost_drag_bps: list[float] = []
-    holding_days: list[int] = []
     actions_taken: list[str] = []
+    trade_records: list[TradeRecord] = []
 
     done = False
     while not done:
@@ -431,18 +457,23 @@ def _evaluate(model, env) -> tuple[float, dict]:
         obs, reward, terminated, truncated, info = env.step(int(action))
         rewards.append(float(reward))
         if info.get("action") == "take":
-            raw_returns.append(float(info.get("net_return", 0.0)))
-            cost_drag_bps.append(float(info.get("cost_bps", 0.0)))
-            holding_days.append(int(info.get("holding_days", 0)))
             actions_taken.append("take")
+            # FIX-#51 + #36: build TradeRecord for daily-P&L scoring.
+            entry = info.get("entry_date")
+            exit_ = info.get("exit_date")
+            if entry is not None and exit_ is not None:
+                trade_records.append(TradeRecord(
+                    entry_date=entry, exit_date=exit_,
+                    return_pct=float(info.get("net_return", 0.0)),
+                    size_pct=float(info.get("size_pct", 0.0)),
+                ))
         elif info.get("action") == "skip":
             actions_taken.append("skip")
         done = bool(terminated) or bool(truncated)
 
-    score, breakdown = validation_composite_score(
-        net_returns=raw_returns,
-        cost_bps=cost_drag_bps,
-        holding_days=holding_days,
+    score, breakdown = validation_composite_score_from_daily_pnl(
+        trades=trade_records,
+        n_total_packs=len(actions_taken),
         rewards=rewards,
         actions=actions_taken,
     )

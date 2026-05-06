@@ -49,14 +49,37 @@ class TradeRecord:
 
 def daily_portfolio_pnl(
     trades: list[TradeRecord],
+    *,
+    window_start: date | None = None,
+    window_end: date | None = None,
 ) -> dict[date, float]:
     """Spread each trade's portfolio return_pct uniformly across its
     holding days. Returns a dict keyed by date; values are the
     *additive* daily contribution to portfolio equity.
 
     Two trades on the same day add their contributions on that day.
+
+    FIX-#52: when ``window_start`` and ``window_end`` are given, the
+    output dict is filled with **zero entries on idle days within
+    the window** (every weekday in [window_start, window_end] gets
+    an entry, even if no trade was open). This is critical for
+    correct Sharpe and max-drawdown computation — a strategy that
+    holds 50 days of 252 should NOT have its Sharpe / DD computed
+    on only 50 active days. Pre-FIX-#52, idle days were silently
+    dropped, inflating Sharpe.
+
+    The "weekday" approximation is a quick proxy for the trading
+    calendar. Bars-aware filling (using actual exchange holidays)
+    is a follow-up.
     """
     daily: dict[date, float] = {}
+    # Pre-fill idle days as zero if window is provided.
+    if window_start is not None and window_end is not None:
+        d = window_start
+        while d <= window_end:
+            if d.weekday() < 5:    # Mon-Fri only
+                daily[d] = 0.0
+            d = d + timedelta(days=1)
     for t in trades:
         n_days = max(1, (t.exit_date - t.entry_date).days)
         per_day = t.return_pct / n_days

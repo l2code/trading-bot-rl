@@ -48,9 +48,11 @@ experiment:
     adverse_selection_bps: 2.0
 
   reward:
-    transaction_cost_bps: 5.0
+    # FIX-#49: weights recalibrated for sized returns. Same as
+    # ppo_filter_v001.yaml.
     drawdown_penalty_weight: 0.10
-    turnover_penalty_weight: 0.02
-    holding_period_penalty_weight: 0.05
+    turnover_penalty_weight: 0.05
+    holding_period_penalty_weight: 0.02
+    skip_counterfactual_scale: 1.0
 
   artifact_root: data/models/

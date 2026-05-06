@@ -151,6 +151,8 @@ def validation_composite_score_from_daily_pnl(
     rewards: list[float] | None = None,
     actions: list[str] | None = None,
     weights: WeightConfig | None = None,
+    window_start=None,                 # date | None — for FIX-#52 idle-day fill
+    window_end=None,                   # date | None
 ) -> tuple[float, dict]:
     """FIX-#36 — date-ordered portfolio metrics.
 
@@ -177,7 +179,9 @@ def validation_composite_score_from_daily_pnl(
     )
 
     weights = weights or WeightConfig()
-    daily_pnl = daily_portfolio_pnl(trades)
+    daily_pnl = daily_portfolio_pnl(
+        trades, window_start=window_start, window_end=window_end,
+    )
 
     cum_ret = total_return_from_daily_pnl(daily_pnl)
     sharpe = annualized_sharpe_from_daily_pnl(daily_pnl)

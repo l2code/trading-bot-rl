@@ -16,8 +16,8 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Sequence
 
 import gymnasium as gym
 import numpy as np
@@ -176,7 +176,6 @@ class SwingTradingEnv(gym.Env):
             return np.zeros(self.observation_builder.dim, dtype=np.float32)
         # Simple zero-portfolio state in MVP env. Walk-forward harness
         # tracks portfolio outside the env.
-        from rl_swing.domain import PortfolioState
         ps = PortfolioState(
             as_of=candidate.as_of, cash=self.starting_equity,
             equity=self.starting_equity,
@@ -191,7 +190,15 @@ class SwingTradingEnv(gym.Env):
         vol_percentile = min(1.0, max(0.0, rv20 / 0.6))
         adv = float(frame.values.get("dollar_volume", 0.0)) if frame else 0.0
 
-        notional = self.starting_equity * candidate.base_size_pct * size_mult
+        # For TAKE actions, cost is computed against the actually-sized
+        # notional (notional-dependent market_impact scales with size).
+        # FIX-#54: for SKIP actions, the counterfactual is simulated at
+        # FULL base_size_pct, so we compute cost at full notional too —
+        # otherwise the skip CF is too optimistic on larger / less-liquid
+        # trades because it ignores impact cost. Pre-FIX-#54 the cost was
+        # 0 (size_mult=0 → notional=0), zeroing impact.
+        cf_size_mult = 1.0 if size_mult <= 0 else size_mult
+        notional = self.starting_equity * candidate.base_size_pct * cf_size_mult
         cost_bps = self.cost_model.cost_bps(
             atr_pct=atr_pct,
             volatility_percentile=vol_percentile,
@@ -232,6 +239,11 @@ class SwingTradingEnv(gym.Env):
                 "candidate_id": candidate.candidate_id,
                 "symbol": candidate.symbol,
                 "strategy_id": candidate.strategy_id,
+                # FIX-#51: needed by _evaluate to build TradeRecords
+                # for daily-P&L-based checkpoint selection.
+                "entry_date": outcome.entry_timestamp.date(),
+                "exit_date": outcome.exit_timestamp.date(),
+                "size_pct": candidate.base_size_pct * size_mult,
             }
             return reward, info
         # Skip: compute counterfactual at full size (so the agent learns

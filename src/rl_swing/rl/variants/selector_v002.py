@@ -245,16 +245,23 @@ class SelectorV002Variant:
                 size_pct=chosen.base_size_pct,
             ))
 
-        # FIX-#36: primary score is daily-P&L based; legacy per-trade
-        # score kept in extras for A/B comparison.
+        # FIX-#36: primary score is daily-P&L based.
+        # FIX-#52: idle days fill as zero so Sharpe/DD aren't biased.
         from rl_swing.rl.validation.metrics import (
             validation_composite_score_from_daily_pnl,
         )
+        if trade_records:
+            win_start = min(t.entry_date for t in trade_records)
+            win_end = max(t.exit_date for t in trade_records)
+        else:
+            win_start = win_end = None
         score, breakdown = validation_composite_score_from_daily_pnl(
             trades=trade_records,
             n_total_packs=len(actions),
             rewards=rewards,
             actions=actions,
+            window_start=win_start,
+            window_end=win_end,
         )
         legacy_score, _legacy_breakdown = validation_composite_score(
             net_returns=net_returns,

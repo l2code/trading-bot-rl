@@ -140,6 +140,46 @@ def test_sharpe_on_daily_pnl_uses_sqrt_252():
     assert s > 0.1   # positive overall (slight positive bias in the daily mean)
 
 
+def test_idle_days_fill_with_zero_when_window_given():
+    """FIX-#52: when window_start/end are passed, idle WEEKDAYS in
+    the window get zero P&L entries. Without this, Sharpe/DD are
+    computed only on active days and overstate the strategy's
+    typical risk."""
+    t = TradeRecord(
+        entry_date=date(2024, 1, 8), exit_date=date(2024, 1, 12),
+        return_pct=0.02, size_pct=0.10,
+    )
+    # Window is one full week before through one full week after
+    # the trade — should fill 2 weeks of weekdays as zeros plus
+    # the 4 active days of the trade.
+    daily = daily_portfolio_pnl(
+        [t],
+        window_start=date(2024, 1, 1),
+        window_end=date(2024, 1, 19),
+    )
+    # Mon Jan 1 to Fri Jan 19 = 15 weekdays. Trade days included.
+    assert len(daily) == 15
+    # Idle weekday before trade: zero.
+    assert daily[date(2024, 1, 1)] == 0.0
+    # Idle weekday after trade: zero.
+    assert daily[date(2024, 1, 19)] == 0.0
+    # Active day: non-zero.
+    assert daily[date(2024, 1, 8)] != 0.0
+
+
+def test_idle_days_no_fill_when_window_not_given():
+    """Backward compat: omitting the window keeps old behavior
+    (only active days emitted)."""
+    t = TradeRecord(
+        entry_date=date(2024, 1, 8), exit_date=date(2024, 1, 12),
+        return_pct=0.02, size_pct=0.10,
+    )
+    daily = daily_portfolio_pnl([t])    # no window
+    # Only the 4 active days of the trade.
+    assert len(daily) == 4
+    assert date(2024, 1, 1) not in daily
+
+
 def test_empty_trades_yield_zero_metrics():
     """No trades — all metrics zero / neutral, no division errors."""
     daily = daily_portfolio_pnl([])
