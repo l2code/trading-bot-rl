@@ -35,22 +35,20 @@ from rl_swing.rl.env.execution_simulator import TradeOutcome
 class RewardModel:
     target_risk_pct: float = 0.02
     drawdown_penalty_weight: float = 0.10
-    turnover_penalty_weight: float = 0.02
+    # 0.30 risk-adjusted units per trade (was 0.02 — way too small to
+    # affect choice). With reward_clip=5, a marginal +0.5 risk-adj
+    # winner now nets 0.20, while skipping it under full-mirror costs
+    # 0.50; so taking weak winners is still right, but a near-zero EV
+    # trade is clearly skip-worthy.
+    turnover_penalty_weight: float = 0.30
     holding_period_penalty_weight: float = 0.05
-    # Scale for the mirrored counterfactual on skip.
-    #
-    # Fully symmetric (1.0) makes "always skip" too easy: when winners
-    # and losers are roughly balanced, skipping a loser at full +R
-    # earns the same as taking a winner at +R, so the agent can ride
-    # an "always skip" local optimum that's almost as good as perfect
-    # filtering — gradient signal is weak.
-    #
-    # 0.5 means missing a winner is half as bad as catching one is
-    # good (and avoiding a loser is half as good as taking a winner
-    # is good). Both "always take" and "always skip" become strictly
-    # dominated by a discriminating policy regardless of base rate,
-    # so PPO has a clear gradient to climb.
-    skip_counterfactual_scale: float = 0.5
+    # Scale for the mirrored counterfactual on skip. With the
+    # turnover_penalty_weight bump above, the take-side is paying a
+    # 0.30 floor cost per trade. Full mirror (1.0) is now appropriate:
+    # both "always take" and "always skip" are strictly dominated by
+    # a discriminating policy, and the trade-cost floor keeps the
+    # take side from dominating purely on positive base rate.
+    skip_counterfactual_scale: float = 1.0
     reward_clip: float = 5.0
 
     def reward_for_take(

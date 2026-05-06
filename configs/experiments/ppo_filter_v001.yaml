@@ -50,7 +50,15 @@ experiment:
   reward:
     transaction_cost_bps: 5.0
     drawdown_penalty_weight: 0.10
-    turnover_penalty_weight: 0.02
+    # Bumped from 0.02 → 0.30: prior weight was so small relative to
+    # take-side risk-adjusted reward (±5 clipped) that "always take"
+    # was the optimal policy regardless of candidate quality.
+    turnover_penalty_weight: 0.30
     holding_period_penalty_weight: 0.05
+    # Full mirror: skip rewards = -clipped(counterfactual_return /
+    # target_risk_pct). Combined with the bumped turnover penalty,
+    # this ensures both "always take" and "always skip" are strictly
+    # dominated by a discriminating policy.
+    skip_counterfactual_scale: 1.0
 
   artifact_root: data/models/

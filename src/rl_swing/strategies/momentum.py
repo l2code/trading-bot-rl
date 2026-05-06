@@ -28,6 +28,14 @@ class MomentumStrategy:
     min_relative_strength: float = 0.0
     max_holding_days: int = 10
     base_size_pct: float = 0.10
+    # Lower bound on 20-day return. Defaults to >0 (only positive
+    # momentum). Set to a small negative number to admit weak/marginal
+    # candidates that the RL filter then has to discriminate.
+    min_r20: float = 0.0
+    # Whether to require close > SMA200. Default True keeps legacy
+    # behavior (only longer-term uptrending names). Disable when you
+    # want to widen the candidate funnel for the RL filter.
+    require_sma200_above: bool = True
 
     def generate(
         self,
@@ -42,11 +50,11 @@ class MomentumStrategy:
             spy_r20 = v.get("spy_return_20d", 0.0)
 
             rs = r20 - spy_r20
-            if r20 <= 0:
+            if r20 <= self.min_r20:
                 continue
             if close_vs_sma50 <= 0:
                 continue
-            if close_vs_sma200 <= 0:
+            if self.require_sma200_above and close_vs_sma200 <= 0:
                 continue
             if rs < self.min_relative_strength:
                 continue

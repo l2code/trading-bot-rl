@@ -24,6 +24,12 @@ class BreakoutStrategy:
     min_relative_volume: float = 1.0
     max_holding_days: int = 10
     base_size_pct: float = 0.07
+    # How close to the 20d high counts as a breakout. -0.002 = within
+    # 0.2% of the high (legacy default, very strict). Loosen to e.g.
+    # -0.02 (within 2%) to widen the candidate funnel for the RL
+    # filter — those marginal not-quite-breakouts are exactly the
+    # candidates a good filter should learn to skip.
+    max_distance_below_high: float = -0.002
 
     def generate(
         self,
@@ -36,8 +42,7 @@ class BreakoutStrategy:
             rel_vol = v.get("relative_volume_20", 0.0)
             spy_ok = v.get("spy_above_sma_50", 0.0) >= 0.5
 
-            # Within 0.2% of the 20-day high — counts as a breakout.
-            if dist_high < -0.002:
+            if dist_high < self.max_distance_below_high:
                 continue
             if rel_vol < self.min_relative_volume:
                 continue

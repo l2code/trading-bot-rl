@@ -218,10 +218,20 @@ def validate_from_experiment(
         as_of=datetime(test_end.year, test_end.month, test_end.day),
         cash=100_000.0, equity=100_000.0,
     )
+    # Loose candidate config — must match trainer.py to ensure the
+    # trained model is evaluated on the same candidate distribution
+    # it learned from.
     candidates = list(StrategyAggregator([
-        MomentumStrategy(),
-        RsiMeanReversionStrategy(),
-        BreakoutStrategy(),
+        MomentumStrategy(
+            min_relative_strength=-0.05,
+            min_r20=-0.02,
+            require_sma200_above=False,
+        ),
+        RsiMeanReversionStrategy(rsi_threshold=35.0),
+        BreakoutStrategy(
+            min_relative_volume=0.7,
+            max_distance_below_high=-0.02,
+        ),
     ]).generate(frames, portfolio))
 
     cost_cfg = exp.get("cost_model") or {}
@@ -230,8 +240,9 @@ def validate_from_experiment(
     reward_model = RewardModel(
         target_risk_pct=0.02,
         drawdown_penalty_weight=reward_cfg.get("drawdown_penalty_weight", 0.10),
-        turnover_penalty_weight=reward_cfg.get("turnover_penalty_weight", 0.02),
+        turnover_penalty_weight=reward_cfg.get("turnover_penalty_weight", 0.30),
         holding_period_penalty_weight=reward_cfg.get("holding_period_penalty_weight", 0.05),
+        skip_counterfactual_scale=reward_cfg.get("skip_counterfactual_scale", 1.0),
     )
 
     # Baselines

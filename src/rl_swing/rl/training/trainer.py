@@ -139,10 +139,23 @@ def _build_env(
         as_of=datetime(end.year, end.month, end.day),
         cash=100_000.0, equity=100_000.0,
     )
+    # Looser candidate config so the RL filter has discrimination work
+    # to do. The legacy defaults already pre-filter so aggressively
+    # that nearly every surviving candidate is positive-EV, in which
+    # case "always take" is the optimal policy and PPO has no lift.
+    # Loosening admits marginal/borderline setups for the filter to
+    # learn to reject.
     strategies = [
-        MomentumStrategy(),
-        RsiMeanReversionStrategy(),
-        BreakoutStrategy(),
+        MomentumStrategy(
+            min_relative_strength=-0.05,
+            min_r20=-0.02,
+            require_sma200_above=False,
+        ),
+        RsiMeanReversionStrategy(rsi_threshold=35.0),
+        BreakoutStrategy(
+            min_relative_volume=0.7,
+            max_distance_below_high=-0.02,
+        ),
     ]
     candidates = list(StrategyAggregator(strategies).generate(frames, portfolio))
 
@@ -150,8 +163,9 @@ def _build_env(
     reward = RewardModel(
         target_risk_pct=0.02,
         drawdown_penalty_weight=cfg.reward.get("drawdown_penalty_weight", 0.10),
-        turnover_penalty_weight=cfg.reward.get("turnover_penalty_weight", 0.02),
+        turnover_penalty_weight=cfg.reward.get("turnover_penalty_weight", 0.30),
         holding_period_penalty_weight=cfg.reward.get("holding_period_penalty_weight", 0.05),
+        skip_counterfactual_scale=cfg.reward.get("skip_counterfactual_scale", 1.0),
     )
 
     return SwingTradingEnv(

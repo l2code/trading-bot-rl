@@ -1,0 +1,14 @@
+{
+  "id": "crazypenguin/rl-swing-v001-500k-3seeds-fixed",
+  "title": "rl-swing v001 500k 3seeds fixed",
+  "code_file": "kaggle_train.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "false",
+  "enable_gpu": "false",
+  "enable_internet": "true",
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

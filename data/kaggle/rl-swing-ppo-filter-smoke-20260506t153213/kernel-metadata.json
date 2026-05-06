@@ -1,0 +1,14 @@
+{
+  "id": "crazypenguin/rl-swing-ppo-filter-smoke-20260506t153213",
+  "title": "rl-swing smoke v5",
+  "code_file": "kaggle_train.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "false",
+  "enable_gpu": "false",
+  "enable_internet": "true",
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
