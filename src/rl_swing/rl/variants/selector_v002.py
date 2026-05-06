@@ -187,6 +187,9 @@ class SelectorV002Variant:
         holding_days: list[int] = []
         actions: list[str] = []
         per_strategy_take_counts = [0] * n_slots
+        # FIX-#36: TradeRecords for date-ordered daily-P&L metrics.
+        from rl_swing.rl.validation.portfolio_pnl import TradeRecord
+        trade_records: list[TradeRecord] = []
 
         for pack in sorted(packs, key=lambda p: (p.as_of, p.symbol)):
             frame = frames_by_key.get((pack.symbol, pack.as_of))
@@ -235,8 +238,25 @@ class SelectorV002Variant:
             holding_days.append(outcome.holding_days)
             actions.append("take")
             per_strategy_take_counts[idx] += 1
+            trade_records.append(TradeRecord(
+                entry_date=outcome.entry_timestamp.date(),
+                exit_date=outcome.exit_timestamp.date(),
+                return_pct=outcome.return_pct,
+                size_pct=chosen.base_size_pct,
+            ))
 
-        score, breakdown = validation_composite_score(
+        # FIX-#36: primary score is daily-P&L based; legacy per-trade
+        # score kept in extras for A/B comparison.
+        from rl_swing.rl.validation.metrics import (
+            validation_composite_score_from_daily_pnl,
+        )
+        score, breakdown = validation_composite_score_from_daily_pnl(
+            trades=trade_records,
+            n_total_packs=len(actions),
+            rewards=rewards,
+            actions=actions,
+        )
+        legacy_score, _legacy_breakdown = validation_composite_score(
             net_returns=net_returns,
             cost_bps=cost_drag_bps,
             holding_days=holding_days,
@@ -246,6 +266,9 @@ class SelectorV002Variant:
 
         extras = {
             "per_strategy_take_counts": list(per_strategy_take_counts),
+            "metric_basis": breakdown.get("metric_basis"),
+            "legacy_per_trade_score": float(legacy_score),
+            "n_trading_days": breakdown.get("n_trading_days", 0),
         }
 
         return PolicyResult(
