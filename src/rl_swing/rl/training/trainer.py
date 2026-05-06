@@ -188,11 +188,15 @@ def _build_env(
     )
 
     cost = EquityExecutionModel(**cfg.cost_model) if cfg.cost_model else EquityExecutionModel()
+    # FIX-#62: missing-key fallbacks now match the FIX-#58 dataclass
+    # defaults so a partial reward YAML doesn't silently revert to
+    # the pre-FIX-49 calibration. Source-of-truth for these defaults
+    # is RewardModel; keep this list in sync if defaults change.
     reward = RewardModel(
         target_risk_pct=0.02,
         drawdown_penalty_weight=cfg.reward.get("drawdown_penalty_weight", 0.10),
-        turnover_penalty_weight=cfg.reward.get("turnover_penalty_weight", 0.30),
-        holding_period_penalty_weight=cfg.reward.get("holding_period_penalty_weight", 0.05),
+        turnover_penalty_weight=cfg.reward.get("turnover_penalty_weight", 0.05),
+        holding_period_penalty_weight=cfg.reward.get("holding_period_penalty_weight", 0.02),
         skip_counterfactual_scale=cfg.reward.get("skip_counterfactual_scale", 1.0),
     )
 
@@ -485,6 +489,20 @@ def _evaluate(
             actions_taken.append("skip")
         done = bool(terminated) or bool(truncated)
 
+    # FIX-#61: derive trading_days from val_env's bars so checkpoint
+    # selection uses the SAME calendar walk-forward uses (handles
+    # exchange holidays correctly, not just weekday-approx).
+    trading_days = None
+    bars_attr = getattr(env, "bars", None)
+    if bars_attr is not None and hasattr(bars_attr, "by_symbol"):
+        td_set = set()
+        for sym_bars in bars_attr.by_symbol.values():
+            for b in sym_bars:
+                td_set.add(b.timestamp.date())
+        if window_start is not None and window_end is not None:
+            td_set = {d for d in td_set if window_start <= d <= window_end}
+        trading_days = sorted(td_set) or None
+
     score, breakdown = validation_composite_score_from_daily_pnl(
         trades=trade_records,
         n_total_packs=len(actions_taken),
@@ -492,5 +510,6 @@ def _evaluate(
         actions=actions_taken,
         window_start=window_start,
         window_end=window_end,
+        trading_days=trading_days,
     )
     return score, breakdown

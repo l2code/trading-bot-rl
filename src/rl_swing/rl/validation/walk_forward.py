@@ -286,9 +286,10 @@ def validate_from_experiment(
     reward_cfg = exp.get("reward") or {}
     reward_model = RewardModel(
         target_risk_pct=0.02,
+        # FIX-#62: defaults match RewardModel post-FIX-#58.
         drawdown_penalty_weight=reward_cfg.get("drawdown_penalty_weight", 0.10),
-        turnover_penalty_weight=reward_cfg.get("turnover_penalty_weight", 0.30),
-        holding_period_penalty_weight=reward_cfg.get("holding_period_penalty_weight", 0.05),
+        turnover_penalty_weight=reward_cfg.get("turnover_penalty_weight", 0.05),
+        holding_period_penalty_weight=reward_cfg.get("holding_period_penalty_weight", 0.02),
         skip_counterfactual_scale=reward_cfg.get("skip_counterfactual_scale", 1.0),
     )
 
