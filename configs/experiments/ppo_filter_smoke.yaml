@@ -48,10 +48,11 @@ experiment:
     adverse_selection_bps: 2.0
 
   reward:
-    transaction_cost_bps: 5.0
+    # FIX-#49: smoke uses same recalibrated weights for parity.
     drawdown_penalty_weight: 0.10
-    turnover_penalty_weight: 0.02
-    holding_period_penalty_weight: 0.05
+    turnover_penalty_weight: 0.05
+    holding_period_penalty_weight: 0.02
+    skip_counterfactual_scale: 1.0
 
   data_provider: synthetic_momentum
 

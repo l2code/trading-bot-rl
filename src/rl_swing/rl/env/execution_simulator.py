@@ -34,6 +34,13 @@ class TradeOutcome:
 
     ``raw_return_pct`` is preserved for backward compatibility — it
     aliases to ``asset_return_pct`` (size-unaware, cost-unaware).
+
+    ``peak_drawdown_pct`` is **portfolio-scale** (FIX-#50): a 5%
+    asset drawdown on a 10%-sized trade reports 0.005, not 0.05.
+    Symmetric with the post-FIX-22 ``return_pct`` semantics. Pre-
+    FIX-#50, this was asset-scale, which made dd-penalty
+    asymmetric with the sized risk_adj signal and inflated dd_pen
+    by 1/size_pct.
     """
     symbol: str
     entry_timestamp: datetime
@@ -135,6 +142,13 @@ class ExecutionSimulator:
         net_return = float(size_pct) * (asset_return - cost_drag_round_trip)
         holding_days = max(1, (exit_ts - entry_bar.timestamp).days or 1)
 
+        # FIX-#50: peak_drawdown_pct is portfolio-scale. A 5% asset
+        # drawdown on a 10%-sized trade is 0.5% portfolio drawdown.
+        # This is symmetric with the post-FIX-22 return_pct semantics
+        # so dd_pen and risk_adj live on the same scale in
+        # RewardModel.
+        portfolio_peak_dd = float(size_pct) * peak_dd
+
         return TradeOutcome(
             symbol=entry_bar.symbol,
             entry_timestamp=entry_bar.timestamp,
@@ -148,7 +162,7 @@ class ExecutionSimulator:
             asset_return_pct=asset_return,
             size_pct=float(size_pct),
             holding_days=holding_days,
-            peak_drawdown_pct=peak_dd,
+            peak_drawdown_pct=portfolio_peak_dd,
             exit_reason=exit_reason,
             cost_bps=cost_bps,
         )

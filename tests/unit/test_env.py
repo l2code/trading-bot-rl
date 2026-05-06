@@ -343,6 +343,25 @@ def test_execution_simulator_charges_round_trip_cost():
     assert abs(out.asset_return_pct) < 1e-12
 
 
+def test_execution_simulator_dd_scales_with_size_pct():
+    """FIX-#50: peak_drawdown_pct is portfolio-scale (sized).
+
+    A 10%-sized trade with 5% asset DD reports portfolio peak_dd of
+    0.5%, not 5%. Symmetric with FIX-22's return_pct semantics so
+    dd_pen and risk_adj live on the same scale in RewardModel.
+    """
+    bars = _bars_linear(20, slope=-0.005)   # gradually declining; some intra-trade DD
+    sim = ExecutionSimulator(atr_target_mult=10.0, atr_stop_mult=10.0)
+    small = sim.simulate(bars=bars, entry_index=0, size_pct=0.10,
+                         max_holding_days=10, cost_bps=0, atr_pct=0.02)
+    large = sim.simulate(bars=bars, entry_index=0, size_pct=1.00,
+                         max_holding_days=10, cost_bps=0, atr_pct=0.02)
+    assert small is not None and large is not None
+    # Portfolio DD scales linearly with size_pct (cost_bps=0 isolates).
+    if small.peak_drawdown_pct > 0:
+        assert abs(large.peak_drawdown_pct - 10.0 * small.peak_drawdown_pct) < 1e-9
+
+
 def test_execution_simulator_return_scales_with_size_pct():
     """FIX-22: size_pct must scale realized portfolio return.
 

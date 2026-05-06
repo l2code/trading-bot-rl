@@ -422,4 +422,8 @@ class MultiStrategySwingTradingEnv(gym.Env):
             "holding_days": outcome.holding_days,
             "candidate_id": chosen.candidate_id,
             "symbol": chosen.symbol,
+            # FIX-#51: needed by _evaluate for TradeRecord construction.
+            "entry_date": outcome.entry_timestamp.date(),
+            "exit_date": outcome.exit_timestamp.date(),
+            "size_pct": chosen.base_size_pct,
         }
