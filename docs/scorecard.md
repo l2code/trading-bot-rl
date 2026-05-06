@@ -56,7 +56,7 @@ Last update: 2026-05-06 after applying SDLC lessons (issue #1).
 | Variant | Tier | Verdict | Diary |
 |---------|------|---------|-------|
 | `filter_v001` (loose) | exploratory (yfinance) | **NO_GO** | [`2026-05-06_v001_filter_loose_NO_GO.md`](../research/diary/2026-05-06_v001_filter_loose_NO_GO.md) |
-| `selector_v002` | exploratory (yfinance) | pending | tracked in [#3](https://github.com/l2code/trading-bot-rl/issues/3) |
+| `selector_v002` | exploratory (yfinance) | **NO_GO** | [`2026-05-06_v002_selector_NO_GO.md`](../research/diary/2026-05-06_v002_selector_NO_GO.md) |
 
 ## Roadmap progress
 
