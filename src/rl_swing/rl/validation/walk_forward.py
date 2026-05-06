@@ -90,6 +90,9 @@ def evaluate_policy(
     holding_days: list[int] = []
     actions: list[str] = []
     decisions: list[dict] = []
+    # FIX-#36: TradeRecords for date-ordered daily-P&L metrics.
+    from rl_swing.rl.validation.portfolio_pnl import TradeRecord
+    trade_records: list[TradeRecord] = []
 
     for c in sorted(candidates, key=lambda c: (c.as_of, c.symbol)):
         frame = frames_by_key.get((c.symbol, c.as_of))
@@ -138,6 +141,12 @@ def evaluate_policy(
             holding_days.append(outcome.holding_days)
             actions.append("take")
             rewards.append(r)
+            trade_records.append(TradeRecord(
+                entry_date=outcome.entry_timestamp.date(),
+                exit_date=outcome.exit_timestamp.date(),
+                return_pct=outcome.return_pct,
+                size_pct=c.base_size_pct * size_mult,
+            ))
             decisions.append({
                 "candidate_id": c.candidate_id, "symbol": c.symbol,
                 "as_of": c.as_of.isoformat(),
@@ -161,7 +170,20 @@ def evaluate_policy(
                 "counterfactual_return": outcome.return_pct if outcome else None,
             })
 
-    score, breakdown = validation_composite_score(
+    # FIX-#36: primary metrics now come from the date-ordered daily-
+    # P&L path. Legacy per-trade metrics still computed for the
+    # ``legacy_*`` keys so we can A/B and verify the magnitude of
+    # the change.
+    from rl_swing.rl.validation.metrics import (
+        validation_composite_score_from_daily_pnl,
+    )
+    score, breakdown = validation_composite_score_from_daily_pnl(
+        trades=trade_records,
+        n_total_packs=len(actions),
+        rewards=rewards,
+        actions=actions,
+    )
+    legacy_score, legacy_breakdown = validation_composite_score(
         net_returns=net_returns,
         cost_bps=cost_drag_bps,
         holding_days=holding_days,
@@ -172,6 +194,12 @@ def evaluate_policy(
         "model_id": scorer.model_id,
         "validation_composite_score": score,
         **breakdown,
+        "legacy_per_trade_score": legacy_score,
+        "legacy_per_trade_breakdown": {
+            k: legacy_breakdown[k]
+            for k in ("total_return", "annualized_sharpe", "profit_factor",
+                      "max_drawdown", "turnover_take_rate")
+        },
         "cost_stress_multiplier": cost_stress_multiplier,
         "decisions": decisions,
     }

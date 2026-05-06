@@ -94,6 +94,14 @@ def validation_composite_score(
     actions: list[str] | None = None,
     weights: WeightConfig | None = None,
 ) -> tuple[float, dict]:
+    """Per-trade composite score (legacy, pre-FIX-#36).
+
+    Computes Sharpe / max-DD on the per-trade return sequence — i.e.,
+    treats each trade as if it were a separate day. This silently
+    handles concurrent positions and date order incorrectly. New
+    callers should prefer ``validation_composite_score_from_daily_pnl``;
+    this function is kept for reproducing pre-FIX-#36 results.
+    """
     weights = weights or WeightConfig()
 
     cum_ret = total_return(net_returns)
@@ -125,6 +133,85 @@ def validation_composite_score(
         "max_drawdown": mdd,
         "turnover_take_rate": turn,
         "mean_reward": float(np.mean(rewards)) if rewards else 0.0,
+        "metric_basis": "per_trade_legacy",
+        "components": {
+            "n_total_return": n_total,
+            "n_sharpe": n_sharpe,
+            "n_profit_factor": n_pf,
+            "n_max_drawdown": n_mdd,
+            "n_turnover": n_turn,
+        },
+    }
+
+
+def validation_composite_score_from_daily_pnl(
+    *,
+    trades,                            # list[TradeRecord]
+    n_total_packs: int = 0,
+    rewards: list[float] | None = None,
+    actions: list[str] | None = None,
+    weights: WeightConfig | None = None,
+) -> tuple[float, dict]:
+    """FIX-#36 — date-ordered portfolio metrics.
+
+    Computes Sharpe / max-DD on a daily P&L series spread from the
+    given trades, NOT on the per-trade return sequence. Properly
+    handles concurrent positions (their daily contributions add)
+    and date order (two ±10% trades on the same day net to zero).
+
+    Returns the same composite_score / breakdown shape as the legacy
+    ``validation_composite_score`` so the acceptance gate, scorecard,
+    and diary template work unchanged.
+
+    ``trades`` must be a list of ``TradeRecord`` (from
+    ``portfolio_pnl``). ``n_total_packs`` is used for the turnover
+    metric (``len(trades) / n_total_packs``); pass 0 to fall back to
+    the legacy ``actions``-derived turnover.
+    """
+    from rl_swing.rl.validation.portfolio_pnl import (
+        annualized_sharpe_from_daily_pnl,
+        daily_portfolio_pnl,
+        max_drawdown_from_daily_pnl,
+        profit_factor_from_daily_pnl,
+        total_return_from_daily_pnl,
+    )
+
+    weights = weights or WeightConfig()
+    daily_pnl = daily_portfolio_pnl(trades)
+
+    cum_ret = total_return_from_daily_pnl(daily_pnl)
+    sharpe = annualized_sharpe_from_daily_pnl(daily_pnl)
+    pf = profit_factor_from_daily_pnl(daily_pnl)
+    mdd = max_drawdown_from_daily_pnl(daily_pnl)
+    if n_total_packs > 0:
+        turn = float(len(trades) / max(1, n_total_packs))
+    else:
+        turn = turnover_metric(actions or [])
+
+    n_total = _normalize_clipped(cum_ret, lo=-0.5, hi=0.5)
+    n_sharpe = _normalize_clipped(sharpe, lo=-1.0, hi=2.0)
+    n_pf = _normalize_clipped(pf, lo=0.5, hi=2.0)
+    n_mdd = _normalize_clipped(mdd, lo=0.0, hi=0.5)
+    n_turn = _normalize_clipped(turn, lo=0.0, hi=1.0)
+
+    score = (
+        weights.return_weight * n_total
+        + weights.sharpe_weight * n_sharpe
+        + weights.profit_factor_weight * n_pf
+        - weights.drawdown_weight * n_mdd
+        - weights.turnover_weight * n_turn
+    )
+
+    return float(score), {
+        "n_trades": len(trades),
+        "n_trading_days": len(daily_pnl),
+        "total_return": cum_ret,
+        "annualized_sharpe": sharpe,
+        "profit_factor": pf,
+        "max_drawdown": mdd,
+        "turnover_take_rate": turn,
+        "mean_reward": float(np.mean(rewards)) if rewards else 0.0,
+        "metric_basis": "daily_pnl_v36",
         "components": {
             "n_total_return": n_total,
             "n_sharpe": n_sharpe,
