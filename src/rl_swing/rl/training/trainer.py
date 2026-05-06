@@ -252,7 +252,13 @@ def _run_single_seed(
     factories = [make_factory(i) for i in range(max(1, n_envs))]
     if n_envs > 1:
         _log.info("seed=%s using SubprocVecEnv with %d parallel envs", seed, n_envs)
-        train_env = SubprocVecEnv(factories, start_method="spawn")
+        # ``fork`` is critical on Linux runners (Kaggle, Colab, CI):
+        # ``spawn`` re-executes the parent script in each child, which
+        # would re-run the kaggle_train.py top-level logic (git clone,
+        # sys.path mutation) once per worker and crash. ``fork`` shares
+        # the parent's already-prepared state and lets closure-based
+        # env factories pickle correctly.
+        train_env = SubprocVecEnv(factories, start_method="fork")
     else:
         train_env = DummyVecEnv(factories)
 
