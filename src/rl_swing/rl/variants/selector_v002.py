@@ -246,22 +246,24 @@ class SelectorV002Variant:
             ))
 
         # FIX-#36: primary score is daily-P&L based.
-        # FIX-#52: idle days fill as zero so Sharpe/DD aren't biased.
+        # FIX-#52 + #56: idle days fill across the FULL test window.
+        # FIX-#57: trading-day calendar from bars so P&L spreads
+        # across actual trading days, not weekends.
         from rl_swing.rl.validation.metrics import (
             validation_composite_score_from_daily_pnl,
         )
-        if trade_records:
-            win_start = min(t.entry_date for t in trade_records)
-            win_end = max(t.exit_date for t in trade_records)
-        else:
-            win_start = win_end = None
+        trading_days = sorted({
+            b.timestamp.date() for b in ctx.bars
+            if ctx.test_start <= b.timestamp.date() <= ctx.test_end
+        })
         score, breakdown = validation_composite_score_from_daily_pnl(
             trades=trade_records,
             n_total_packs=len(actions),
             rewards=rewards,
             actions=actions,
-            window_start=win_start,
-            window_end=win_end,
+            window_start=ctx.test_start,
+            window_end=ctx.test_end,
+            trading_days=trading_days or None,
         )
         legacy_score, _legacy_breakdown = validation_composite_score(
             net_returns=net_returns,

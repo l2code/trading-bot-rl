@@ -52,41 +52,75 @@ def daily_portfolio_pnl(
     *,
     window_start: date | None = None,
     window_end: date | None = None,
+    trading_days: list[date] | None = None,
 ) -> dict[date, float]:
-    """Spread each trade's portfolio return_pct uniformly across its
-    holding days. Returns a dict keyed by date; values are the
-    *additive* daily contribution to portfolio equity.
+    """Spread each trade's portfolio return_pct across its holding
+    period. Returns a dict keyed by date; values are *additive*
+    daily contributions to portfolio equity.
 
     Two trades on the same day add their contributions on that day.
 
-    FIX-#52: when ``window_start`` and ``window_end`` are given, the
-    output dict is filled with **zero entries on idle days within
-    the window** (every weekday in [window_start, window_end] gets
-    an entry, even if no trade was open). This is critical for
-    correct Sharpe and max-drawdown computation — a strategy that
-    holds 50 days of 252 should NOT have its Sharpe / DD computed
-    on only 50 active days. Pre-FIX-#52, idle days were silently
-    dropped, inflating Sharpe.
+    Spreading semantics (FIX-#57):
+    - If ``trading_days`` is provided, returns are spread across the
+      sequence of trading days from entry_date to exit_date,
+      INCLUSIVE — Saturdays, Sundays, and exchange holidays are
+      skipped. Annualization with ``sqrt(252)`` is then consistent.
+    - If ``trading_days`` is omitted, falls back to calendar-day
+      spreading (legacy behavior — applies P&L to weekend dates
+      and over-divides by calendar count). Use only when a trading
+      calendar isn't available.
 
-    The "weekday" approximation is a quick proxy for the trading
-    calendar. Bars-aware filling (using actual exchange holidays)
-    is a follow-up.
+    Idle-day fill (FIX-#52 + #56):
+    - If ``trading_days`` provided: every trading day in the list
+      gets a zero entry, then trade contributions are added.
+    - Else if ``window_start``+``window_end`` provided: every
+      weekday (Mon-Fri) in [window_start, window_end] gets a zero
+      entry. Approximate but better than nothing.
+    - Else: only active days appear in the result.
+
+    The window-or-calendar fill is critical for correct Sharpe /
+    max-DD on policies that are flat for parts of the window.
     """
     daily: dict[date, float] = {}
-    # Pre-fill idle days as zero if window is provided.
-    if window_start is not None and window_end is not None:
+
+    # Build the lookup set used for both idle-day fill and trade
+    # spreading.
+    if trading_days is not None:
+        td_sorted = sorted(set(trading_days))
+        for d in td_sorted:
+            daily[d] = 0.0
+    elif window_start is not None and window_end is not None:
         d = window_start
         while d <= window_end:
-            if d.weekday() < 5:    # Mon-Fri only
+            if d.weekday() < 5:    # Mon-Fri only — approximate
                 daily[d] = 0.0
             d = d + timedelta(days=1)
+        td_sorted = sorted(daily.keys())
+    else:
+        td_sorted = None
+
     for t in trades:
-        n_days = max(1, (t.exit_date - t.entry_date).days)
-        per_day = t.return_pct / n_days
-        d = t.entry_date
-        for _ in range(n_days):
-            daily[d] = daily.get(d, 0.0) + per_day
-            d = d + timedelta(days=1)
+        if td_sorted is not None:
+            # Spread on TRADING days from entry to exit, inclusive.
+            from bisect import bisect_left, bisect_right
+            lo = bisect_left(td_sorted, t.entry_date)
+            hi = bisect_right(td_sorted, t.exit_date)
+            window_days = td_sorted[lo:hi]
+            if not window_days:
+                # Trade fell outside known calendar — skip silently.
+                # (Could happen if entry/exit predate window_start.)
+                continue
+            per_day = t.return_pct / len(window_days)
+            for d in window_days:
+                daily[d] = daily.get(d, 0.0) + per_day
+        else:
+            # Legacy calendar-day fallback.
+            n_days = max(1, (t.exit_date - t.entry_date).days)
+            per_day = t.return_pct / n_days
+            d = t.entry_date
+            for _ in range(n_days):
+                daily[d] = daily.get(d, 0.0) + per_day
+                d = d + timedelta(days=1)
     return daily
 
 

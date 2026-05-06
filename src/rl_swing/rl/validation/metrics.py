@@ -153,6 +153,7 @@ def validation_composite_score_from_daily_pnl(
     weights: WeightConfig | None = None,
     window_start=None,                 # date | None — for FIX-#52 idle-day fill
     window_end=None,                   # date | None
+    trading_days=None,                 # list[date] | None — FIX-#57
 ) -> tuple[float, dict]:
     """FIX-#36 — date-ordered portfolio metrics.
 
@@ -180,7 +181,10 @@ def validation_composite_score_from_daily_pnl(
 
     weights = weights or WeightConfig()
     daily_pnl = daily_portfolio_pnl(
-        trades, window_start=window_start, window_end=window_end,
+        trades,
+        window_start=window_start,
+        window_end=window_end,
+        trading_days=trading_days,
     )
 
     cum_ret = total_return_from_daily_pnl(daily_pnl)

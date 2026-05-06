@@ -12,7 +12,6 @@ TrainingVariant interface.
 from __future__ import annotations
 
 import logging
-import uuid
 from datetime import datetime
 from typing import Any
 
@@ -27,12 +26,10 @@ from rl_swing.rl.agents.baseline_scorers import (
     RandomPolicyScorer,
 )
 from rl_swing.rl.env.swing_env import SwingTradingEnv
-from rl_swing.rl.validation.metrics import validation_composite_score
 from rl_swing.rl.variants.base import (
     EnvBuildContext,
     EvaluationContext,
     PolicyResult,
-    TrainingVariant,
 )
 from rl_swing.strategies.aggregator import StrategyAggregator
 from rl_swing.strategies.breakout import BreakoutStrategy
@@ -154,6 +151,8 @@ class FilterV001Variant:
             cost_model=ctx.cost_model,
             reward_model=ctx.reward_model,
             cost_stress_multiplier=cost_stress_multiplier,
+            eval_window_start=ctx.test_start,    # FIX-#56
+            eval_window_end=ctx.test_end,        # FIX-#56
         )
         # ``evaluate_policy`` returns a dict with our metric keys plus
         # 'decisions' (which we don't need to repeat in the result).
