@@ -106,6 +106,101 @@ def test_yfinance_reads_cached_parquet(tmp_path):
     assert bars[0].symbol == "FOO"
 
 
+def test_yfinance_covering_cache_satisfies_shifted_request(tmp_path, monkeypatch):
+    """FIX-#83: a cached file whose range fully covers the requested
+    range should be re-used even if the filename doesn't exact-match
+    the request. The classic failure was an off-by-one warmup_start
+    triggering redundant yfinance fetches.
+
+    We stub yfinance to raise on download so the test fails loudly if
+    the cache lookup falls through to the network path.
+    """
+    import sys
+
+    import pandas as pd
+    p = YFinanceProvider(cache_dir=str(tmp_path), use_cache=True)
+    # Cached: covers 2020-01-01..2020-01-10 (wider).
+    cache = tmp_path / "FOO__2020-01-01__2020-01-10__adj=1.parquet"
+    df = pd.DataFrame({
+        "Open": [100.0, 101.0, 102.0, 103.0, 104.0],
+        "High": [102.0, 103.0, 104.0, 105.0, 106.0],
+        "Low":  [ 99.0, 100.0, 101.0, 102.0, 103.0],
+        "Close":[101.0, 102.0, 103.0, 104.0, 105.0],
+        "Adj Close":[101.0, 102.0, 103.0, 104.0, 105.0],
+        "Volume":[1e6]*5,
+    }, index=pd.to_datetime(["2020-01-02", "2020-01-03", "2020-01-06",
+                              "2020-01-07", "2020-01-08"]))
+    df.to_parquet(cache)
+    # Stub yfinance.download to raise so any fall-through is loud.
+    fake = type(sys)("yfinance")
+    def _fail(*a, **k):
+        raise AssertionError(
+            "FIX-#83 regression: covering cache should have been used; "
+            "fell through to network fetch instead."
+        )
+    fake.download = _fail
+    monkeypatch.setitem(sys.modules, "yfinance", fake)
+    # Request a SHIFTED narrower range that the cached file covers.
+    bars = list(p.get_bars(["FOO"], date(2020, 1, 2), date(2020, 1, 7)))
+    # Should pick up the 4 bars in [2020-01-02, 2020-01-07] (Jan-2,3,6,7).
+    assert len(bars) == 4
+    assert bars[0].timestamp.date() == date(2020, 1, 2)
+    assert bars[-1].timestamp.date() == date(2020, 1, 7)
+
+
+def test_yfinance_covering_cache_picks_smallest(tmp_path, monkeypatch):
+    """When multiple cached files cover the request, prefer the
+    smallest one (least filtering work on read)."""
+    import sys
+
+    import pandas as pd
+    p = YFinanceProvider(cache_dir=str(tmp_path), use_cache=True)
+    # Wide covering: 2020-01-01..2020-01-30 (30 days).
+    wide = tmp_path / "FOO__2020-01-01__2020-01-30__adj=1.parquet"
+    pd.DataFrame({
+        "Open":[100.0]*5, "High":[101.0]*5, "Low":[99.0]*5,
+        "Close":[100.5]*5, "Adj Close":[100.5]*5, "Volume":[1e6]*5,
+    }, index=pd.to_datetime(["2020-01-02","2020-01-03","2020-01-06","2020-01-07","2020-01-08"])).to_parquet(wide)
+    # Narrow covering: 2020-01-01..2020-01-15 (14 days). Smaller; should be picked.
+    narrow = tmp_path / "FOO__2020-01-01__2020-01-15__adj=1.parquet"
+    pd.DataFrame({
+        "Open":[200.0]*5, "High":[201.0]*5, "Low":[199.0]*5,
+        "Close":[200.5]*5, "Adj Close":[200.5]*5, "Volume":[2e6]*5,
+    }, index=pd.to_datetime(["2020-01-02","2020-01-03","2020-01-06","2020-01-07","2020-01-08"])).to_parquet(narrow)
+    fake = type(sys)("yfinance")
+    def _raise(*a, **k):
+        raise AssertionError("network fetch should not occur")
+    fake.download = _raise
+    monkeypatch.setitem(sys.modules, "yfinance", fake)
+    bars = list(p.get_bars(["FOO"], date(2020, 1, 2), date(2020, 1, 7)))
+    # Should have picked the narrow file (close prices ~200, not ~100).
+    assert all(b.close > 150.0 for b in bars), "should have picked narrow covering file"
+
+
+def test_yfinance_no_covering_cache_falls_through_to_fetch(tmp_path, monkeypatch):
+    """If no cached file covers the requested range, fall through to
+    the network fetch path."""
+    import sys
+
+    p = YFinanceProvider(cache_dir=str(tmp_path), use_cache=True)
+    # Cached file that does NOT cover the request (wrong year).
+    import pandas as pd
+    cache = tmp_path / "FOO__2019-01-01__2019-12-31__adj=1.parquet"
+    pd.DataFrame({
+        "Open":[100.0],"High":[101.0],"Low":[99.0],"Close":[100.5],
+        "Adj Close":[100.5],"Volume":[1e6],
+    }, index=pd.to_datetime(["2019-06-15"])).to_parquet(cache)
+    called = {"download": False}
+    fake = type(sys)("yfinance")
+    def _fake_download(*a, **k):
+        called["download"] = True
+        return None
+    fake.download = _fake_download
+    monkeypatch.setitem(sys.modules, "yfinance", fake)
+    list(p.get_bars(["FOO"], date(2020, 1, 1), date(2020, 12, 31)))
+    assert called["download"] is True, "should have called yfinance.download"
+
+
 def test_yfinance_snapshot_id_stable(tmp_path):
     p = YFinanceProvider(cache_dir=str(tmp_path))
     a = p.get_snapshot_id(["A", "B"], date(2020, 1, 1), date(2020, 6, 30))

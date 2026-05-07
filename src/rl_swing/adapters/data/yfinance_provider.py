@@ -58,6 +58,48 @@ class YFinanceProvider:
         name = f"{symbol}__{start.isoformat()}__{end.isoformat()}__adj={int(self.auto_adjust)}.parquet"
         return cache_dir / name
 
+    def _find_covering_cache_file(
+        self, symbol: str, start: date, end: date, cache_dir: Path,
+    ) -> Path | None:
+        """FIX-#83: range-coverage cache match.
+
+        The legacy lookup hits only on exact-filename match, which
+        causes redundant yfinance fetches when a slightly-shifted
+        warmup window (off by one day) misses an otherwise-covering
+        cached file. Scan the cache for any
+        ``{symbol}__{cached_start}__{cached_end}__adj=N.parquet``
+        whose range fully contains the requested ``(start, end)``,
+        and return the path of the cheapest such file (smallest
+        coverage = least filtering on read). Returns None if none
+        of the cached files cover the requested range — caller then
+        falls through to fresh fetch.
+        """
+        adj = int(self.auto_adjust)
+        prefix = f"{symbol}__"
+        suffix = f"__adj={adj}.parquet"
+        candidates: list[tuple[int, Path]] = []
+        try:
+            for p in cache_dir.glob(f"{prefix}*{suffix}"):
+                stem = p.name[len(prefix):-len(suffix)]
+                parts = stem.split("__")
+                if len(parts) != 2:
+                    continue
+                try:
+                    cs = date.fromisoformat(parts[0])
+                    ce = date.fromisoformat(parts[1])
+                except ValueError:
+                    continue
+                if cs <= start and ce >= end:
+                    span_days = (ce - cs).days
+                    candidates.append((span_days, p))
+        except OSError as e:  # pragma: no cover
+            _log.warning("yfinance cache scan failed for %s: %s", symbol, e)
+            return None
+        if not candidates:
+            return None
+        candidates.sort(key=lambda kv: kv[0])
+        return candidates[0][1]
+
     def _bars_for_symbol(
         self,
         symbol: str,
@@ -69,12 +111,35 @@ class YFinanceProvider:
         import pandas as pd  # heavy; lazy
         cache_file = self._cache_file(symbol, start, end, cache_dir)
         df: pd.DataFrame | None = None
+        # Fast path: exact-filename match.
         if self.use_cache and cache_file.exists():
             try:
                 df = pd.read_parquet(cache_file)
             except Exception as e:  # pragma: no cover
                 _log.warning("yfinance cache read failed for %s: %s", symbol, e)
                 df = None
+        # FIX-#83: if exact match missed, try a covering cache file.
+        # Filter the loaded DataFrame to the requested range so the
+        # caller sees identical bars to what an exact-match cache
+        # would have produced.
+        if (df is None or df.empty) and self.use_cache:
+            covering = self._find_covering_cache_file(symbol, start, end, cache_dir)
+            if covering is not None:
+                try:
+                    full_df = pd.read_parquet(covering)
+                    # Index is datetime-like; filter inclusive to (start, end).
+                    df = full_df[(full_df.index.date >= start) & (full_df.index.date <= end)]
+                    _log.info(
+                        "yfinance cache hit via covering file for %s: %s "
+                        "(requested %s..%s)",
+                        symbol, covering.name, start, end,
+                    )
+                except Exception as e:  # pragma: no cover
+                    _log.warning(
+                        "yfinance covering-cache read failed for %s (%s): %s",
+                        symbol, covering, e,
+                    )
+                    df = None
 
         if df is None or df.empty:
             df = self._download(symbol, start, end)
