@@ -1,3 +1,11 @@
+> # ⚠ [CORRECTION 2026-05-07 — FIX-#78]
+>
+> **The numbers in this diary were computed on `synthetic_momentum`, not yfinance.**
+> The headline finding ("masked-PPO with FEAT-7 features is bit-identical to
+> first_fired; 4-of-5 strict criteria fail; Phase 1 closes") **survives** on
+> yfinance — same bit-identity to first_fired holds on real data. The verdict
+> stands. See [`2026-05-07_d4_canonical_yfinance_rebaseline.md`](2026-05-07_d4_canonical_yfinance_rebaseline.md).
+
 # RESEARCH-029b — masked-PPO retrain on FEAT-7 obs (Path B tie-breaker)
 
 **Date:** 2026-05-06

@@ -54,7 +54,23 @@ For findings, run results, RFC outcomes, and decisions, see
 |---------|------|---------|--------|
 | `filter_v001` | exploratory (yfinance) | **FINAL_NO_GO (post-Phase-0)** | 2026-05-06 |
 | `selector_v002` | exploratory (yfinance) | **FINAL_NO_GO (post-Phase-0)** | 2026-05-06 |
-| `selector_v002_masked` (FEAT-29) | exploratory (yfinance) | **SHADOW_ONLY (Phase 1)** | 2026-05-06 |
+| `selector_v002_masked` (FEAT-29) | exploratory (yfinance) | **NO_GO** (rebaselined yfinance — superseded the synthetic-tagged SHADOW_ONLY from PR #70) | 2026-05-07 |
+| `selector_baseline_set_ranker` (FEAT-34 PR-1b) | exploratory (yfinance) | **NO_GO** (rebaselined yfinance — superseded the synthetic-tagged SHADOW_ONLY from PR #74/#75) | 2026-05-07 |
+| `selector_baseline_supervised` (FEAT-30 + FEAT-7) | exploratory (yfinance) | **NO_GO** (rebaselined yfinance) | 2026-05-07 |
+
+> **FIX-#78 contamination correction (2026-05-07).** Every Phase 1 step 1
+> through Phase 3 step 1 PR-1c verdict (PR #70-#76) was computed on
+> `synthetic_momentum` rather than yfinance, due to a silent fallback
+> in `validate_from_experiment`. Step 1 (PR #79) added a guardrail; step
+> 2 (PR #80) added `data_provider: yfinance_daily` to the selector
+> YAMLs; step 3 (PR #81) ran the canonical yfinance rebaseline; step 4
+> (this entry) supersedes the contaminated verdicts above. **What
+> survives on yfinance:** masked-PPO is bit-identical to first_fired;
+> Phase 1 closure verdict (NO_GO) stands. **What does NOT survive:** the
+> set_ranker's "lowest-DD-of-any-policy" claim; "first trained policy
+> to beat random 5-of-5"; "highest composite 0.7331". Every trained
+> selector is NO_GO vs random on yfinance 2022. See
+> [`research/diary/2026-05-07_d4_canonical_yfinance_rebaseline.md`](research/diary/2026-05-07_d4_canonical_yfinance_rebaseline.md).
 
 > **Phase 0 fully closed** — all 16 P1+P2 simulator/evaluation
 > fixes plus FIX-AUDIT-V2 (#56–#59) and FIX-AUDIT-V3 (#61, #62)

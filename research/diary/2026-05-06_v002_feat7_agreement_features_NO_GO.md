@@ -1,3 +1,11 @@
+> # ⚠ [CORRECTION 2026-05-07 — FIX-#78]
+>
+> **The numbers in this diary were computed on `synthetic_momentum`, not yfinance.**
+> The qualitative finding ("FEAT-7 features carry marginal signal; not material
+> enough to flip the gate") may or may not hold on yfinance — not re-tested at
+> rebaseline scope. The implementation is correct; the eval was contaminated.
+> See [`2026-05-07_d4_canonical_yfinance_rebaseline.md`](2026-05-07_d4_canonical_yfinance_rebaseline.md).
+
 # RESEARCH-007 — cross-strategy agreement features + cheap-ranker re-test
 
 **Date:** 2026-05-06

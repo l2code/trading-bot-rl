@@ -1,3 +1,25 @@
+> # ⚠ [CORRECTION 2026-05-07 — FIX-#78] — VERDICT INVALIDATED
+>
+> **The numbers in this diary were computed on `synthetic_momentum`, not yfinance.**
+> The "first trained policy on yfinance to clear all 5 Phase-24 gate metrics
+> vs random — including LOWER max_drawdown" claim is **false on real yfinance**.
+>
+> On yfinance 2022:
+> - set_ranker DD = 0.832 (HIGHER than yfinance random's 0.704), not 0.154 (synthetic).
+> - set_ranker gate output: NO_GO improved=1 mat_regress=2 (vs claimed GO 5-of-5 on synthetic).
+>
+> The architecture's apparent "low-DD" property was an artifact of synthetic_momentum's
+> structure, not a real property of the DeepSets encoder.
+>
+> **Reframed but not refuted:** the per_strat distinctness from first_fired DOES
+> survive on yfinance ([946, 34, 54] vs [1127, 32, 40]) — the architecture is
+> doing real selection beyond priority order; that selection just isn't profitable
+> on real 2022 yfinance.
+>
+> Verdict in scorecard / CLAUDE.md §2 corrected to **NO_GO**. See
+> [`2026-05-07_d4_canonical_yfinance_rebaseline.md`](2026-05-07_d4_canonical_yfinance_rebaseline.md)
+> for full numbers. Original SHADOW_ONLY framing preserved below for audit-trail.
+
 # RESEARCH-034a — set/slate encoder cheap diagnostic (FEAT-34 PR-1)
 
 **Date:** 2026-05-06
