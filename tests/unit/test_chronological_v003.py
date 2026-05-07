@@ -21,6 +21,8 @@ from rl_swing.domain import (
     MarketBar,
 )
 from rl_swing.rl.agents.portfolio_baselines import (
+    BCPortfolioPolicy,
+    BCTargetPortfolioPolicy,
     NoOpPortfolioPolicy,
     RandomActionPortfolioPolicy,
     TopKPortfolioPolicy,
@@ -287,6 +289,120 @@ def test_random_action_baseline_stays_in_range():
 
 
 # ---------------------------------------------------------------------
+# FEAT-32 M2: BC target + BC inference policy
+# ---------------------------------------------------------------------
+def _bc_obs(
+    n_fired: float = 0.0, signal_max: float = 0.0,
+    signal_mean: float = 0.0, signal_std: float = 0.0,
+    signal_gap_top2: float = 0.0, all_fired: float = 0.0,
+    cash_pct: float = 1.0, gross_exp: float = 0.0,
+    n_open_norm: float = 0.0, dd_pct: float = 0.0,
+    realized_pnl_pct: float = 0.0, day_norm: float = 0.0,
+):
+    """Construct a 12-d obs vector at the layout the BC target reads."""
+    import numpy as np
+    return np.array([
+        n_fired, signal_max, signal_mean, signal_std, signal_gap_top2,
+        all_fired, cash_pct, gross_exp, n_open_norm, dd_pct,
+        realized_pnl_pct, day_norm,
+    ], dtype=np.float64)
+
+
+def test_bc_target_decides_action_2_when_two_fired_and_gap_small():
+    pol = BCTargetPortfolioPolicy(n_actions=3)
+    # n_fired=2, gap=0.05 < 0.10 → action 2 (similar signals → spread risk)
+    a = pol.decide(_bc_obs(n_fired=2, signal_gap_top2=0.05, cash_pct=0.9))
+    assert a == 2
+
+
+def test_bc_target_decides_action_1_when_gap_large_and_cash_high():
+    pol = BCTargetPortfolioPolicy(n_actions=3)
+    # n_fired=2 but gap=0.50 > 0.10 → falls through to action 1
+    a = pol.decide(_bc_obs(n_fired=2, signal_gap_top2=0.50, cash_pct=0.9))
+    assert a == 1
+
+
+def test_bc_target_decides_action_0_when_no_fired():
+    pol = BCTargetPortfolioPolicy(n_actions=3)
+    a = pol.decide(_bc_obs(n_fired=0, cash_pct=1.0))
+    assert a == 0
+
+
+def test_bc_target_decides_action_0_when_cash_too_low_and_one_fired():
+    pol = BCTargetPortfolioPolicy(n_actions=3)
+    # n_fired=1 but cash=0.30 < 0.50 threshold → action 0
+    a = pol.decide(_bc_obs(n_fired=1, signal_gap_top2=0.50, cash_pct=0.30))
+    assert a == 0
+
+
+def test_bc_target_handles_none_obs():
+    pol = BCTargetPortfolioPolicy(n_actions=3)
+    assert pol.decide(None) == 0
+
+
+def test_bc_target_n_actions_2_never_emits_action_2():
+    pol = BCTargetPortfolioPolicy(n_actions=2)
+    # Even if conditions for action 2 are satisfied, n_actions=2
+    # collapses the rule to (action 1 or 0).
+    a = pol.decide(_bc_obs(n_fired=3, signal_gap_top2=0.01, cash_pct=0.9))
+    assert a in (0, 1)
+
+
+def test_bc_inference_handles_none_obs_without_loading():
+    pol = BCPortfolioPolicy(
+        artifact_path="/nonexistent/path/that/should/never/exist.joblib",
+        n_actions=3,
+    )
+    # None short-circuits; load is never invoked.
+    assert pol.decide(None) == 0
+
+
+def test_bc_inference_clamps_invalid_predictions():
+    """BCPortfolioPolicy must clamp out-of-range predictions to 0
+    so a malformed model artifact can't crash the env loop."""
+    class _StubModel:
+        def predict(self, X):  # noqa: ARG002
+            import numpy as np
+            return np.array([99])  # out of range
+
+    pol = BCPortfolioPolicy(artifact_path="ignored", n_actions=3)
+    pol._model = _StubModel()  # bypass loading
+    a = pol.decide(_bc_obs(n_fired=1))
+    assert a == 0
+
+
+def test_bc_inference_returns_predicted_action_in_range():
+    class _StubModel:
+        def predict(self, X):  # noqa: ARG002
+            import numpy as np
+            return np.array([2])
+
+    pol = BCPortfolioPolicy(artifact_path="ignored", n_actions=3)
+    pol._model = _StubModel()
+    a = pol.decide(_bc_obs(n_fired=2))
+    assert a == 2
+
+
+def test_bc_inference_returns_zero_on_predict_exception():
+    class _BadModel:
+        def predict(self, X):  # noqa: ARG002
+            raise RuntimeError("boom")
+
+    pol = BCPortfolioPolicy(artifact_path="ignored", n_actions=3)
+    pol._model = _BadModel()
+    assert pol.decide(_bc_obs(n_fired=1)) == 0
+
+
+def test_bc_inference_raises_filenotfound_on_missing_artifact():
+    pol = BCPortfolioPolicy(
+        artifact_path="/nonexistent/path/should/raise.joblib",
+        n_actions=3,
+    )
+    with pytest.raises(FileNotFoundError):
+        pol._load()
+
+
+# ---------------------------------------------------------------------
 # ChronologicalSwingEnv tests
 # ---------------------------------------------------------------------
 def _build_minimal_env(
@@ -486,13 +602,16 @@ def test_variant_evaluate_runs_baselines_on_synthetic_window():
         experiment_config={"v003_max_top_k": 2},
     )
     results = v.evaluate(ctx)
-    # Expect 4 baselines (no_op, top1, top2, random_action), no trained model.
-    assert len(results) == 4
+    # Expect 4 core baselines (no_op, top1, top2, random_action). The
+    # BC baseline (FEAT-32 M2) is auto-included when its artifact
+    # exists at data/models/portfolio_baseline_bc/model.joblib, so
+    # results may be 4 or 5 depending on the local artifact state.
     ids = [r.model_id for r in results]
     assert "portfolio_baseline_no_op" in ids
     assert "portfolio_baseline_top1" in ids
     assert "portfolio_baseline_top2" in ids
     assert "portfolio_baseline_random_action" in ids
+    assert len(results) >= 4
     # All should report cost_stress_multiplier=1.0 (M1 doesn't compute cost-2x).
     for r in results:
         assert r.cost_stress_multiplier == 1.0

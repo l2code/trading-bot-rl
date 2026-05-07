@@ -26,6 +26,7 @@ import gymnasium as gym
 
 from rl_swing.domain import PortfolioState
 from rl_swing.rl.agents.portfolio_baselines import (
+    BCPortfolioPolicy,
     NoOpPortfolioPolicy,
     RandomActionPortfolioPolicy,
     TopKPortfolioPolicy,
@@ -114,6 +115,20 @@ class PortfolioV003Variant:
         if max_top_k >= 2:
             policies.append(TopKPortfolioPolicy(k=2))
         policies.append(RandomActionPortfolioPolicy(n_actions=n_actions, seed=42))
+
+        # FEAT-32 M2: behavioral-cloning baseline. Auto-included when
+        # the artifact exists at the standard path. Trained offline via
+        # ``scripts/train_bc_v003.py``. The diagnostic question is:
+        # can a supervised classifier imitate a non-trivial state-
+        # dependent target on this env? If not, the env is unlearnable
+        # and PPO won't escape that. Mirrors FEAT-30 supervised-ranker
+        # auto-inclusion in selector_v002.
+        from pathlib import Path as _Path
+        bc_path = _Path("data/models/portfolio_baseline_bc/model.joblib")
+        if bc_path.exists():
+            policies.append(BCPortfolioPolicy(
+                artifact_path=str(bc_path), n_actions=n_actions,
+            ))
 
         rl_added = False
         if ctx.artifact_path is not None and ctx.artifact_path.exists():

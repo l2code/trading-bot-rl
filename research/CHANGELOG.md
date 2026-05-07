@@ -29,6 +29,29 @@ codifies the rule.
 
 ---
 
+## 2026-05-07 (FEAT-32 M2) — FEAT: behavioral-cloning env-learnability diagnostic PASSES on v3 chronological env
+
+**Issue:** [#87](https://github.com/l2code/trading-bot-rl/issues/87) FEAT-32 M2
+**Diary:** [`2026-05-07_feat32_m2_bc_PASS.md`](diary/2026-05-07_feat32_m2_bc_PASS.md)
+
+After M1 shipped the v3 chronological env scaffold (PR #86), M2 asks:
+is the env even learnable? A supervised classifier
+(`HistGradientBoostingClassifier`) was trained to imitate a hand-coded
+3-region state-dependent target policy (`BCTargetPortfolioPolicy`)
+over 80 random training windows on yfinance 2014-2020. Held-out val
+accuracy on 20 fresh windows: **1.0000** (well above the M2 PASS
+threshold of 0.70). The 12-dim obs carries enough signal to express
+a non-trivial state-dependent policy; the env-degeneracy hypothesis
+for any future PPO collapse is ruled out. M2 PASS unlocks M3 (Kaggle
+masked-PPO 500k×3); if M3 collapses, the failure is hyperparam /
+exploration, not architectural. Test count 315 → 326 (+11 BC tests).
+The variant auto-includes `portfolio_baseline_bc` in `evaluate()`
+when the artifact exists at
+`data/models/portfolio_baseline_bc/model.joblib`, mirroring the
+FEAT-30 supervised-ranker pattern from v2.
+
+---
+
 ## 2026-05-07 (D4-b multi-cycle yfinance) — RESEARCH: 4-year regime sweep confirms NO_GO; D2 invalidated; "low-DD selector" was synthetic-only
 
 **Issue:** [#5](https://github.com/l2code/trading-bot-rl/issues/5) D4-b

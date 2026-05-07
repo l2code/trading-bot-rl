@@ -63,3 +63,92 @@ class RandomActionPortfolioPolicy:
 
     def decide(self, obs) -> int:
         return self._rng.randint(0, self.n_actions - 1)
+
+
+# ---------------------------------------------------------------------
+# FEAT-32 M2: behavioral-cloning target policy.
+# A non-trivial state-dependent rule with action variance across
+# states. Used as the imitation target for the BC env-learnability
+# diagnostic (literal top1 is trivial — labels are constant).
+@dataclass
+class BCTargetPortfolioPolicy:
+    """Hand-coded state-dependent target with three action regions:
+      - action 2 when slate has ≥2 fired packs AND signal gap_top2
+        is small (similar signals → spread the risk by taking both)
+      - action 1 when slate has ≥1 fired pack AND cash > 0.5
+      - action 0 otherwise
+
+    Reads obs at the indices laid out in
+    ``ChronologicalSwingEnv.OBS_DIM`` documentation:
+      [n_fired, signal_max, signal_mean, signal_std, signal_gap_top2,
+       all_fired_ind, cash_pct, gross_exp, n_open_norm, dd_pct,
+       realized_pnl_pct, day_norm]
+    """
+    n_actions: int = 3
+    gap_threshold: float = 0.10
+    cash_threshold: float = 0.50
+    model_id: str = "portfolio_target_bc"
+
+    def decide(self, obs) -> int:
+        if obs is None:
+            return 0
+        try:
+            n_fired = float(obs[0])
+            signal_gap_top2 = float(obs[4])
+            cash_pct = float(obs[6])
+        except (IndexError, TypeError):
+            return 0
+        if self.n_actions >= 3 and n_fired >= 2 and signal_gap_top2 < self.gap_threshold:
+            return 2
+        if n_fired >= 1 and cash_pct > self.cash_threshold:
+            return 1
+        return 0
+
+
+# ---------------------------------------------------------------------
+# FEAT-32 M2: BC inference policy. Wraps a trained sklearn classifier.
+@dataclass
+class BCPortfolioPolicy:
+    """Inference-side wrapper around a trained behavioral-cloning
+    classifier (sklearn HistGradientBoostingClassifier or any
+    sklearn-compatible classifier with ``predict``).
+
+    Lazy-loaded so the module is importable without sklearn installed
+    (e.g. unit tests of unrelated baselines).
+    """
+    artifact_path: str
+    n_actions: int
+    model_id: str = "portfolio_baseline_bc"
+
+    def __post_init__(self) -> None:
+        self._model = None
+        self._meta: dict = {}
+
+    def _load(self):
+        if self._model is not None:
+            return self._model
+        from pathlib import Path
+        path = Path(self.artifact_path)
+        if not path.exists():
+            raise FileNotFoundError(
+                f"BC artifact not found: {self.artifact_path}."
+            )
+        import joblib  # type: ignore[import-untyped]
+        bundle = joblib.load(str(path))
+        self._model = bundle["model"]
+        self._meta = {k: v for k, v in bundle.items() if k != "model"}
+        return self._model
+
+    def decide(self, obs) -> int:
+        if obs is None:
+            return 0
+        import numpy as np
+        model = self._load()
+        x = np.asarray(obs, dtype=np.float64).reshape(1, -1)
+        try:
+            pred = int(model.predict(x)[0])
+        except Exception:
+            return 0
+        if pred < 0 or pred >= self.n_actions:
+            return 0
+        return pred
