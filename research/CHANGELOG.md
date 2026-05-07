@@ -29,6 +29,46 @@ codifies the rule.
 
 ---
 
+## 2026-05-06 (Phase 1 step 3) — RESEARCH: cross-strategy agreement features NO_GO; gap to random halved but not flipped
+
+**Issue:** [#7](https://github.com/l2code/trading-bot-rl/issues/7) (agreement-features half closed; pairwise-one-hot + multi-day variants stay open)
+**Run:** local on Loki — sklearn HistGB re-fit on 28,219 rows × 36 features (was 27); fit in 1.1s; in-sample MSE 0.01673
+**Diary:** [`2026-05-06_v002_feat7_agreement_features_NO_GO.md`](diary/2026-05-06_v002_feat7_agreement_features_NO_GO.md)
+
+Phase 1 step 3 — operator-authorized "Path B" feature engineering
+before HPO, motivated by the bit-identity finding from PR #71.
+Added the operator-specified pack-level + per-slot agreement
+features (`pack_n_fired`, `pack_signal_max/mean/std/gap_top2`,
+`pack_all_fired`, `pack_same_symbol_strategy_agreement`, per-slot
+`is_top_signal` and `rank_by_signal`). Wired into both the
+`MultiStrategyObservationBuilder` (so the next masked-PPO
+retrain sees them) and the supervised ranker's
+`PER_SLOT_FEATURE_NAMES`. Pure-function helpers in a new module
+`agreement_features.py` so train and inference share the same
+implementation.
+
+Re-trained the cheap supervised ranker (28k rows × 36 features,
+fit in 1.1s) and ran rl-swing validate to compute the leverage
+test. Result: **marginal improvement, not material.** Composite
+score 0.7107 → 0.7145 (Δ +0.0038); sharpe +4.376 → +4.645
+(Δ +0.27); max_DD 0.1963 → 0.1889 (Δ -0.0074); n_trades 1088 →
+1031 (slightly more selective). Gap to `selector_baseline_random`
+(score 0.7186) closed from 0.0079 to 0.0041 — about half. But
+the same 3 material regressions vs random remain (return -1.35,
+sharpe -2.46, profit_factor -1.05). Verdict: NO_GO.
+
+The features carry real-but-modest signal — they did move the
+ranker along the right axis. But not enough to flip the gate. Per
+the operator's pre-agreed framing (chat 2026-05-06): "If ranker
+improves materially, PPO/HPO becomes worth run budget." A 0.5%
+composite-score gain that doesn't flip any gate metric is hard to
+call material. The diary's recommendation is **Path A** (pivot to
+Phase 3 architectural #34/#32 instead of a #27 Optuna burn). Path
+B alternative — one masked-PPO Kaggle retrain on the new obs as a
+tie-breaker — is the operator's call.
+
+282 tests passing (276 + 6 new agreement-feature tests).
+
 ## 2026-05-06 (Phase 1, late evening) — RESEARCH: supervised ranker NO_GO — masked-PPO bit-identical to first_fired baseline
 
 **Issue:** [#30](https://github.com/l2code/trading-bot-rl/issues/30) (supervised half closed; LinUCB sub-RFC stays open)

@@ -205,7 +205,12 @@ def main() -> int:
             if outcome is None:
                 n_skipped_no_sim += 1
                 continue
-            X_rows.append(build_slot_features(frame, slot_idx, candidate))
+            # FEAT-7: pass pack + n_slots so the row includes pack-level
+            # and per-slot agreement features.
+            X_rows.append(build_slot_features(
+                frame, slot_idx, candidate,
+                pack=pack, n_strategies=n_slots,
+            ))
             y_rows.append(float(outcome.return_pct) / float(args.target_risk_pct))
 
     if not X_rows:

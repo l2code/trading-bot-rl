@@ -10,7 +10,7 @@ Last update: 2026-05-06 after applying SDLC lessons (issue #1).
 - **Pluggable variant architecture.** `TrainingVariant` + component
   registry means new variants are one new file plus one registry
   entry. v1 (filter) and v2 (selector) live side by side cleanly.
-- **Test discipline.** 276 tests today. Coverage floor 85%. Every
+- **Test discipline.** 282 tests today. Coverage floor 85%. Every
   variant ships with its own test module.
 - **Pure-function reward + cost models.** `RewardModel` and
   `EquityExecutionModel` are stateless dataclasses; they run
@@ -62,6 +62,7 @@ Last update: 2026-05-06 after applying SDLC lessons (issue #1).
 | `selector_v002` (post-Phase-0) | exploratory (yfinance) | **FINAL_NO_GO** | [`2026-05-06_v002_selector_post_phase0_FINAL_NO_GO.md`](../research/diary/2026-05-06_v002_selector_post_phase0_FINAL_NO_GO.md) |
 | `selector_v002_masked` (FEAT-29 / Phase 1) | exploratory (yfinance) | **SHADOW_ONLY** (bit-identical to `first_fired` baseline — see addendum) | [`2026-05-06_v002_masked_SHADOW_ONLY.md`](../research/diary/2026-05-06_v002_masked_SHADOW_ONLY.md) |
 | `selector_baseline_supervised` (FEAT-30 / Phase 1) | exploratory (yfinance) | **NO_GO** | [`2026-05-06_v002_masked_supervised_ranker_NO_GO.md`](../research/diary/2026-05-06_v002_masked_supervised_ranker_NO_GO.md) |
+| Cross-strategy agreement features (FEAT-7 / Phase 1) + ranker re-test | exploratory (yfinance) | **NO_GO** (marginal +0.0038 composite; gap to random halved but not flipped) | [`2026-05-06_v002_feat7_agreement_features_NO_GO.md`](../research/diary/2026-05-06_v002_feat7_agreement_features_NO_GO.md) |
 
 > **Phase 0 fully closed.** Both post-Phase-0 entries are
 > `FINAL_NO_GO` with audit-v2 / phase0-final metrics (daily-P&L

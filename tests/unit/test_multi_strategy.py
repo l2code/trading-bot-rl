@@ -84,11 +84,18 @@ def test_packer_empty_strategies_yields_no_packs(synthetic_data):
 # ---------------------------------------------------------------------
 def test_observation_builder_dim_is_stable():
     """Observation dim should depend only on (feature_names,
-    n_strategies), not on which strategies actually fired."""
+    n_strategies), not on which strategies actually fired.
+    FEAT-7: layout is [features, pack_agreement, slots, portfolio]."""
+    from rl_swing.rl.env.agreement_features import PACK_AGREEMENT_FIELDS
     builder = MultiStrategyObservationBuilder(
         feature_names=("a", "b", "c"), n_strategies=3,
     )
-    expected_dim = 3 + 3 * SLOT_DIM + 4   # features + slots + portfolio
+    expected_dim = (
+        3                              # features
+        + len(PACK_AGREEMENT_FIELDS)   # FEAT-7 pack-level agreement
+        + 3 * SLOT_DIM                 # per-slot block (incl. FEAT-7 fields)
+        + 4                            # portfolio
+    )
     assert builder.dim == expected_dim
 
 
@@ -112,10 +119,12 @@ def test_observation_builder_zero_pads_unfired_slots(synthetic_data):
         pytest.skip("synthetic data has all 3 strategies firing on every pack")
     frame = next(f for f in frames
                  if f.symbol == partial.symbol and f.as_of == partial.as_of)
+    from rl_swing.rl.env.agreement_features import PACK_AGREEMENT_FIELDS
     obs = builder.build(partial, frame, portfolio)
     assert obs.shape == (builder.dim,)
-    # Slot region starts after the feature-frame block.
-    slot_start = len(ALL_FEATURE_NAMES)
+    # FEAT-7: slot region now starts AFTER the feature-frame block
+    # AND the pack-level agreement block.
+    slot_start = len(ALL_FEATURE_NAMES) + len(PACK_AGREEMENT_FIELDS)
     for i, c in enumerate(partial.candidates):
         slot_base = slot_start + i * SLOT_DIM
         if c is None:
@@ -585,3 +594,110 @@ def test_supervised_ranker_skips_when_max_below_threshold(tmp_path):
         artifact_path=str(art), n_strategies=3,
     )
     assert scorer.select(pack, stub, fake_portfolio) == 0  # skip
+
+
+# ---------------------------------------------------------------------
+# FEAT-7: cross-strategy agreement features.
+def test_pack_agreement_zero_fired_emits_zeros():
+    from rl_swing.rl.env.agreement_features import compute_pack_agreement
+    pack = StrategyPack(
+        symbol="X", as_of=datetime(2024, 1, 1),
+        candidates=(None, None, None),
+    )
+    d = compute_pack_agreement(pack, n_strategies=3)
+    assert d["pack_n_fired"] == 0.0
+    assert d["pack_all_fired"] == 0.0
+    assert d["pack_signal_max"] == 0.0
+    assert d["pack_signal_mean"] == 0.0
+    assert d["pack_signal_std"] == 0.0
+    assert d["pack_signal_gap_top2"] == 0.0
+    assert d["pack_same_symbol_strategy_agreement"] == 0.0
+
+
+def test_pack_agreement_single_fired_no_std_or_gap():
+    """1 fired strategy -> mean=signal_strength, std=0, gap_top2=0."""
+    from rl_swing.rl.env.agreement_features import compute_pack_agreement
+    pack = StrategyPack(
+        symbol="X", as_of=datetime(2024, 1, 1),
+        candidates=(_make_candidate("m", signal_strength=0.7), None, None),
+    )
+    d = compute_pack_agreement(pack, n_strategies=3)
+    assert d["pack_n_fired"] == 1.0
+    assert d["pack_all_fired"] == 0.0
+    assert d["pack_signal_max"] == pytest.approx(0.7)
+    assert d["pack_signal_mean"] == pytest.approx(0.7)
+    assert d["pack_signal_std"] == 0.0
+    assert d["pack_signal_gap_top2"] == 0.0
+
+
+def test_pack_agreement_all_fired_with_distinct_signals():
+    """All-fired pack -> all_fired=1; gap_top2 = max - second_max."""
+    from rl_swing.rl.env.agreement_features import compute_pack_agreement
+    pack = StrategyPack(
+        symbol="X", as_of=datetime(2024, 1, 1),
+        candidates=(
+            _make_candidate("m", signal_strength=0.8),
+            _make_candidate("r", signal_strength=0.5),
+            _make_candidate("b", signal_strength=0.2),
+        ),
+    )
+    d = compute_pack_agreement(pack, n_strategies=3)
+    assert d["pack_n_fired"] == 3.0
+    assert d["pack_all_fired"] == 1.0
+    assert d["pack_signal_max"] == pytest.approx(0.8)
+    assert d["pack_signal_mean"] == pytest.approx((0.8 + 0.5 + 0.2) / 3)
+    # std > 0 for non-degenerate set
+    assert d["pack_signal_std"] > 0.0
+    assert d["pack_signal_gap_top2"] == pytest.approx(0.8 - 0.5)
+
+
+def test_slot_agreement_top_signal_with_tie_break_by_lowest_idx():
+    """Two slots tie on signal_strength -> the lower-idx slot wins
+    is_top_signal. This matches first_fired's tie-break and keeps the
+    feature deterministic."""
+    from rl_swing.rl.env.agreement_features import compute_slot_agreement
+    pack = StrategyPack(
+        symbol="X", as_of=datetime(2024, 1, 1),
+        candidates=(
+            _make_candidate("m", signal_strength=0.5),
+            _make_candidate("r", signal_strength=0.5),  # tied
+            None,
+        ),
+    )
+    d0 = compute_slot_agreement(pack, slot_idx=0)
+    d1 = compute_slot_agreement(pack, slot_idx=1)
+    assert d0["slot_is_top_signal"] == 1.0
+    assert d0["slot_rank_by_signal"] == 0.0
+    assert d1["slot_is_top_signal"] == 0.0
+    assert d1["slot_rank_by_signal"] == 1.0
+
+
+def test_slot_agreement_unfired_slot_emits_zeros():
+    from rl_swing.rl.env.agreement_features import compute_slot_agreement
+    pack = StrategyPack(
+        symbol="X", as_of=datetime(2024, 1, 1),
+        candidates=(_make_candidate("m"), None, None),
+    )
+    d = compute_slot_agreement(pack, slot_idx=1)
+    assert d["slot_is_top_signal"] == 0.0
+    assert d["slot_rank_by_signal"] == 0.0
+
+
+def test_observation_includes_pack_agreement_and_slot_agreement(synthetic_data):
+    """End-to-end: builder.build emits the pack-agreement block in
+    the right place and per-slot agreement fields inside each slot
+    block. Pin via builder.all_feature_names."""
+    builder = MultiStrategyObservationBuilder(
+        feature_names=("a", "b"), n_strategies=3,
+    )
+    names = builder.all_feature_names
+    # Layout: features (a, b) -> pack_agreement (7) -> slots (3 * 6) -> portfolio (4).
+    assert names[:2] == ("a", "b")
+    # Next 7 are pack agreement fields (FEAT-7).
+    pack_block = names[2:9]
+    assert "pack_n_fired" in pack_block
+    assert "pack_signal_gap_top2" in pack_block
+    # Slot 0 starts at index 9; first slot field should be 'strat_0_fired'.
+    assert names[9] == "strat_0_fired"
+    # Per-slot agreement fields are last in each slot block.
+    assert names[9 + SLOT_DIM - 1] == "strat_0_slot_rank_by_signal"
