@@ -19,6 +19,12 @@ experiment:
   # impl in rl_swing/rl/variants/.
   rl_variant: selector_v002
 
+  # FIX-#78: data_provider must be declared explicitly for selector
+  # variants. Prior to FIX-#78, omitting this field silently fell
+  # through to "synthetic_momentum", contaminating 7 diary verdicts
+  # with synthetic eval data masquerading as yfinance.
+  data_provider: yfinance_daily
+
   train_start: "2014-01-01"
   train_end:   "2020-12-31"
   validation_start: "2021-01-01"
