@@ -29,6 +29,37 @@ codifies the rule.
 
 ---
 
+## 2026-05-07 (FEAT-32 M3) — RESEARCH: v003 masked-PPO 500k×3 Kaggle NO_GO; bit-identical to portfolio_baseline_no_op
+
+**Issue:** [#89](https://github.com/l2code/trading-bot-rl/issues/89) FEAT-32 M3
+**PR (masking infra):** [#90](https://github.com/l2code/trading-bot-rl/pull/90) merged at SHA `cb60d3b`
+**PR (verdict):** TBD
+**Diary:** [`2026-05-07_feat32_m3_kaggle_NO_GO.md`](diary/2026-05-07_feat32_m3_kaggle_NO_GO.md)
+**Kernel:** `crazypenguin/rl-swing-v003-masked-m3` (private)
+
+After M2 PASS (PR #88) ruled out env degeneracy, M3 ran the Kaggle
+private masked-PPO 500k×3 retrain on v003. Wall-time was ~95 min
+(operator estimated ~45 min — calibration update: v003 chronological
+≈ 2× v002 per-step due to portfolio bookkeeping every step). All 3
+seeds (11/22/33) converged to **identical** validation composite
+0.32499999999999996 (16 decimals). Trained MaskablePPO is
+**bit-identical to `portfolio_baseline_no_op`**: per_action_counts
+[511, 0, 0], n_trades=0, return=0, DD=0. The Phase-24 metric gate
+trivially "passes" (5/5 improved by zeroing all metrics) but the
+"AND not bit-identical to any baseline" criterion fails — same
+shape as v002 masked-PPO → first_fired bit-identity (PR #71). v003's
+architectural shift (per-day chronological vs per-pack contextual-
+bandit) does NOT solve the v002 default-hyperparam exploration
+problem; PPO at default `ent_coef=0.01` collapses to the all-skip
+attractor on a 3-element action space when the no-trade option is
+the highest-EV action (random=-0.278, top1=-0.301, top2=-0.316).
+M2 PASS means v003 collapse is hyperparam, not architecture.
+Recommended next: M3.b Optuna sweep on `ent_coef` + `lr` per the
+FEAT-32 plan. M4 (multi-cycle yfinance per D4-b) is moot under
+this verdict.
+
+---
+
 ## 2026-05-07 (FEAT-32 M2) — FEAT: behavioral-cloning env-learnability diagnostic PASSES on v3 chronological env
 
 **Issue:** [#87](https://github.com/l2code/trading-bot-rl/issues/87) FEAT-32 M2
