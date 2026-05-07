@@ -28,7 +28,7 @@ function, in priority order:
 3. **Reproducibility.** Same experiment YAML + same seed = same
    numbers, every time. Kaggle and local must agree to the bit on
    smoke runs.
-4. **Test discipline.** 276 tests today; coverage floor is 85%.
+4. **Test discipline.** 282 tests today; coverage floor is 85%.
    Every new variant ships with its own test module.
 
 What this project explicitly does *not* yet optimize for:
@@ -89,20 +89,22 @@ For findings, run results, RFC outcomes, and decisions, see
 > (gate output + tier rules unchanged) but the "PPO learned
 > something" reading is wrong.
 
-> **Phase 1 next** (revised after the supervised NO_GO + bit-
-> identity finding, ordered by EV):
-> 1. **#7 cross-strategy agreement features** — highest-leverage.
->    Current obs gives per-slot features but not "do strategies
->    agree on this (symbol, date)." Cheaper than architectural
->    work and could shift both PPO and ranker verdicts.
-> 2. **#8 Optuna sweep on masked-PPO** with a tightened
->    acceptance criterion: must clear the gate vs random AND beat
->    `first_fired` on absolute composite score.
-> 3. **#34 set/attention or #32 chronological v3** only if (1)
->    and (2) both fail.
->
-> v1 PPO, v2 unmasked PPO, and the v0 supervised ranker are all
-> closed for further compute at default hyperparams.
+> **Phase 1 step 3 landed (#7 cross-strategy agreement features): NO_GO.**
+> Pack-level (`pack_n_fired`, `pack_signal_max/mean/std/gap_top2`,
+> `pack_all_fired`, `pack_same_symbol_strategy_agreement`) + per-slot
+> (`slot_is_top_signal`, `slot_rank_by_signal`) features wired into
+> the obs builder + supervised ranker. Re-trained the cheap ranker;
+> result is **marginal not material**: composite 0.7107 → 0.7145,
+> sharpe +0.27, gap to `selector_baseline_random` halved (0.0079 →
+> 0.0041) but the same 3 material regressions vs random remain.
+> Diary recommendation: **Path A — pivot to Phase 3 architectural
+> work** (#34 set/attention, #32 chronological v3) instead of a
+> #27 Optuna burn. **Path B alternative** — one masked-PPO Kaggle
+> retrain on the new obs as a tie-breaker — is the operator's call.
+
+> v1 PPO, v2 unmasked PPO, the v0 supervised ranker, AND the
+> FEAT-7 supervised ranker are all closed for further compute at
+> default hyperparams. Open decision: A vs B (above).
 
 Diary entries linked from `docs/scorecard.md`. Narrative findings
 live in `research/CHANGELOG.md` and the per-entry diary files —

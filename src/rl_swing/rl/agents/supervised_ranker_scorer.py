@@ -28,19 +28,29 @@ import numpy as np
 
 from rl_swing.domain import FeatureFrame, PortfolioState
 from rl_swing.features.pipelines import ALL_FEATURE_NAMES
+from rl_swing.rl.env.agreement_features import (
+    PACK_AGREEMENT_FIELDS,
+    PER_SLOT_AGREEMENT_FIELDS,
+    pack_agreement_vector,
+    slot_agreement_vector,
+)
 from rl_swing.strategies.multi_strategy_packer import StrategyPack
 
 _log = logging.getLogger(__name__)
 
 
 # Per-slot feature columns. Stable; the trainer must emit features in
-# this exact order so train and inference agree to the bit.
+# this exact order so train and inference agree to the bit. FEAT-7
+# adds the pack-level + per-slot agreement fields between the
+# original frame features and the original per-slot fields.
 PER_SLOT_FEATURE_NAMES: tuple[str, ...] = (
     *ALL_FEATURE_NAMES,
-    "slot_idx",                # 0..N-1
-    "slot_signal_strength",    # candidate.signal_strength
+    *PACK_AGREEMENT_FIELDS,           # FEAT-7: pack-level agreement
+    "slot_idx",                       # 0..N-1
+    "slot_signal_strength",           # candidate.signal_strength
     "slot_base_size_pct",
     "slot_max_holding_days_norm",
+    *PER_SLOT_AGREEMENT_FIELDS,       # FEAT-7: per-slot is_top_signal, rank
 )
 
 
@@ -48,14 +58,31 @@ def build_slot_features(
     frame: FeatureFrame,
     slot_idx: int,
     candidate,  # CandidateTrade
+    *,
+    pack: StrategyPack | None = None,
+    n_strategies: int | None = None,
 ) -> np.ndarray:
     """Build a single per-(pack, slot) feature vector. Must match the
-    column order in PER_SLOT_FEATURE_NAMES."""
+    column order in PER_SLOT_FEATURE_NAMES.
+
+    FEAT-7: ``pack`` and ``n_strategies`` are optional for backward-
+    compat (callers that don't have a pack get zero-filled agreement
+    features). Real callers (the trainer + the inference scorer)
+    always pass them.
+    """
     base = [frame.values.get(name, 0.0) for name in ALL_FEATURE_NAMES]
+    if pack is not None and n_strategies is not None:
+        base.extend(pack_agreement_vector(pack, n_strategies))
+    else:
+        base.extend([0.0] * len(PACK_AGREEMENT_FIELDS))
     base.append(float(slot_idx))
     base.append(float(candidate.signal_strength))
     base.append(float(candidate.base_size_pct))
     base.append(float(candidate.max_holding_days) / 30.0)
+    if pack is not None:
+        base.extend(slot_agreement_vector(pack, slot_idx))
+    else:
+        base.extend([0.0] * len(PER_SLOT_AGREEMENT_FIELDS))
     return np.asarray(base, dtype=np.float64)
 
 
@@ -126,7 +153,17 @@ class SupervisedRankerSelectorScorer:
             )
         with self._lock:
             model = self._load()
-        X = np.vstack([build_slot_features(feature, k, c) for k, c in rows])
+        # FEAT-7: pass pack + n_strategies so the per-slot rows include
+        # the pack-level + per-slot agreement features the trainer
+        # emitted. Without this, inference-time vectors would be
+        # zero-padded in the agreement columns, silently shrinking the
+        # effective feature set vs train.
+        X = np.vstack([
+            build_slot_features(
+                feature, k, c, pack=pack, n_strategies=self.n_strategies,
+            )
+            for k, c in rows
+        ])
         preds = np.asarray(model.predict(X), dtype=np.float64)
         best = int(np.argmax(preds))
         if preds[best] < self.skip_threshold:
