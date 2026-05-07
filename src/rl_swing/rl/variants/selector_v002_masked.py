@@ -79,6 +79,24 @@ class SelectorV002MaskedVariant(SelectorV002Variant):
         if "highest_signal" in ctx.include_baselines:
             scorers.append(HighestSignalSelectorScorer())
 
+        # FEAT-30: supervised ranker baseline. Auto-included when both
+        # the "supervised" tag is in include_baselines AND the offline
+        # trainer's artifact exists. Same scorer as the unmasked v2
+        # evaluate(); identical at inference (the masking only matters
+        # for the RL training path).
+        if "supervised" in ctx.include_baselines:
+            from pathlib import Path
+
+            from rl_swing.rl.agents.supervised_ranker_scorer import (
+                SupervisedRankerSelectorScorer,
+            )
+            ranker_path = Path("data/models/selector_baseline_supervised/model.joblib")
+            if ranker_path.exists():
+                scorers.append(SupervisedRankerSelectorScorer(
+                    artifact_path=str(ranker_path),
+                    n_strategies=n_slots,
+                ))
+
         rl_added = False
         if ctx.artifact_path is not None and ctx.artifact_path.exists():
             scorers.append(MaskablePpoSelectorScorer(

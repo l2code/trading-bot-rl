@@ -127,6 +127,26 @@ class SelectorV002Variant:
         if "highest_signal" in ctx.include_baselines:
             scorers.append(HighestSignalSelectorScorer())
 
+        # FEAT-30: supervised ranker baseline (sklearn HistGB). Auto-
+        # included when (a) "supervised" tag present in include_baselines
+        # AND (b) the artifact exists at the standard path. Trained
+        # offline via scripts/train_supervised_ranker.py; no Kaggle
+        # compute path. The point is the diagnostic from RFC #30:
+        # if a simple ranker beats masked-PPO on the gate, RL machinery
+        # isn't earning its complexity yet.
+        if "supervised" in ctx.include_baselines:
+            from pathlib import Path
+
+            from rl_swing.rl.agents.supervised_ranker_scorer import (
+                SupervisedRankerSelectorScorer,
+            )
+            ranker_path = Path("data/models/selector_baseline_supervised/model.joblib")
+            if ranker_path.exists():
+                scorers.append(SupervisedRankerSelectorScorer(
+                    artifact_path=str(ranker_path),
+                    n_strategies=n_slots,
+                ))
+
         rl_added = False
         if ctx.artifact_path is not None and ctx.artifact_path.exists():
             scorers.append(PpoSelectorScorer(

@@ -442,3 +442,146 @@ def test_variant_registry_loads_masked_variant():
     assert v2m.name == "selector_v002_masked"
     assert hasattr(v2m, "build_env")
     assert hasattr(v2m, "evaluate")
+
+
+# ---------------------------------------------------------------------
+# FEAT-30: supervised ranker baseline (sklearn HistGB).
+def test_supervised_ranker_returns_skip_for_empty_pack(tmp_path):
+    """Empty pack (nothing fired) -> the ranker must return 0 (skip)
+    without trying to predict anything. Exercises the early-return
+    before model load, so it doesn't even need a real artifact."""
+    from rl_swing.rl.agents.supervised_ranker_scorer import (
+        SupervisedRankerSelectorScorer,
+    )
+
+    pack = StrategyPack(
+        symbol="X", as_of=datetime(2024, 1, 1),
+        candidates=(None, None, None),
+    )
+    fake_frame = type("FakeFrame", (), {"feature_version": "features_v001_core_daily"})()
+    fake_portfolio = type("FakePortfolio", (), {})()
+    scorer = SupervisedRankerSelectorScorer(
+        artifact_path=str(tmp_path / "missing.joblib"),
+        n_strategies=3,
+    )
+    assert scorer.select(pack, fake_frame, fake_portfolio) == 0
+
+
+def test_supervised_ranker_picks_argmax_above_threshold(tmp_path, synthetic_data):
+    """Train a tiny ranker on a few hand-built rows where slot 1 is
+    obviously the best, then verify the scorer picks slot 1 (action=2)
+    on a pack where slot 1 is fired and predicted positive."""
+    import joblib
+    import numpy as np
+    from sklearn.ensemble import HistGradientBoostingRegressor
+
+    from rl_swing.rl.agents.supervised_ranker_scorer import (
+        PER_SLOT_FEATURE_NAMES,
+        SupervisedRankerSelectorScorer,
+    )
+
+    # Tiny synthetic dataset: slot_idx is the dominant feature; slot 1 maps to high return.
+    # Per-slot feature values match what _make_candidate emits at inference
+    # (signal_strength=0.5, base_size_pct=0.10, max_holding_days=10) so the
+    # model isn't asked to extrapolate at predict time.
+    n_features = len(PER_SLOT_FEATURE_NAMES)
+    X = np.zeros((90, n_features), dtype=np.float64)
+    y = np.zeros(90, dtype=np.float64)
+    cols = {n: i for i, n in enumerate(PER_SLOT_FEATURE_NAMES)}
+    for i in range(90):
+        slot = i % 3
+        X[i, cols["slot_idx"]] = float(slot)
+        X[i, cols["slot_signal_strength"]] = 0.5
+        X[i, cols["slot_base_size_pct"]] = 0.10
+        X[i, cols["slot_max_holding_days_norm"]] = 10.0 / 30.0
+        y[i] = {0: -0.5, 1: 1.5, 2: 0.0}[slot]
+    model = HistGradientBoostingRegressor(max_iter=50, max_depth=3, random_state=11)
+    model.fit(X, y)
+
+    art = tmp_path / "ranker.joblib"
+    joblib.dump({
+        "model": model,
+        "feature_names": PER_SLOT_FEATURE_NAMES,
+        "n_strategies": 3,
+        "target_risk_pct": 0.02,
+    }, str(art))
+
+    # Build a pack where ALL three strategies fired so the ranker
+    # has a real choice to make.
+    pack = StrategyPack(
+        symbol="AAA", as_of=datetime(2024, 1, 5),
+        candidates=(
+            _make_candidate("momentum"),
+            _make_candidate("rsi_mean_reversion"),
+            _make_candidate("breakout"),
+        ),
+    )
+    # Need a real FeatureFrame for build_slot_features.
+    from rl_swing.domain import FeatureFrame
+    stub = FeatureFrame(
+        symbol=pack.symbol, as_of=pack.as_of,
+        feature_version="features_v001_core_daily",
+        values={n: 0.0 for n in ALL_FEATURE_NAMES},
+        feature_names=ALL_FEATURE_NAMES,
+        source_snapshot_id="test",
+    )
+    fake_portfolio = type("FakePortfolio", (), {})()
+
+    scorer = SupervisedRankerSelectorScorer(
+        artifact_path=str(art), n_strategies=3,
+    )
+    action = scorer.select(pack, stub, fake_portfolio)
+    # action == 0 means skip; action == k means take slot k-1.
+    # Slot 1 has predicted return ~+1.5 (above 0 threshold) and is the max.
+    assert action == 2, f"expected action=2 (slot 1, the dominant slot); got {action}"
+
+
+def test_supervised_ranker_skips_when_max_below_threshold(tmp_path):
+    """If every fired slot has predicted return < 0 (skip threshold),
+    the ranker must return 0. Trains a model where every training row
+    has a negative target, so any prediction will also be negative."""
+    import joblib
+    import numpy as np
+    from sklearn.ensemble import HistGradientBoostingRegressor
+
+    from rl_swing.rl.agents.supervised_ranker_scorer import (
+        PER_SLOT_FEATURE_NAMES,
+        SupervisedRankerSelectorScorer,
+    )
+
+    n_features = len(PER_SLOT_FEATURE_NAMES)
+    X = np.zeros((30, n_features), dtype=np.float64)
+    y = np.full(30, -1.0, dtype=np.float64)  # every example is negative-EV
+    model = HistGradientBoostingRegressor(max_iter=20, max_depth=3, random_state=11)
+    model.fit(X, y)
+
+    art = tmp_path / "ranker.joblib"
+    joblib.dump({
+        "model": model,
+        "feature_names": PER_SLOT_FEATURE_NAMES,
+        "n_strategies": 3,
+        "target_risk_pct": 0.02,
+    }, str(art))
+
+    pack = StrategyPack(
+        symbol="AAA", as_of=datetime(2024, 1, 5),
+        candidates=(
+            _make_candidate("momentum"),
+            _make_candidate("rsi_mean_reversion"),
+            None,
+        ),
+    )
+    from rl_swing.domain import FeatureFrame
+    stub = FeatureFrame(
+        symbol=pack.symbol, as_of=pack.as_of,
+        feature_version="features_v001_core_daily",
+        values={n: 0.0 for n in ALL_FEATURE_NAMES},
+        feature_names=ALL_FEATURE_NAMES,
+        source_snapshot_id="test",
+    )
+    fake_portfolio = type("FakePortfolio", (), {})()
+
+    scorer = SupervisedRankerSelectorScorer(
+        artifact_path=str(art), n_strategies=3,
+    )
+    assert scorer.select(pack, stub, fake_portfolio) == 0  # skip

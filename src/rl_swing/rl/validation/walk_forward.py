@@ -241,6 +241,11 @@ def validate_from_experiment(
     artifact_root_override: str | Path | None = None,
     include_baselines: tuple[str, ...] = (
         "random", "always_take_100", "always_take_50", "never_take",
+        # FEAT-30: opt-in selector tags. Filter (v1) variants ignore
+        # tags they don't recognize; selector (v2 / v2_masked)
+        # variants pick these up and only instantiate the scorer when
+        # the artifact exists. Cheap to leave on by default.
+        "always_skip", "first_fired", "highest_signal", "supervised",
     ),
     include_cost_stress: bool = True,
 ) -> dict:
