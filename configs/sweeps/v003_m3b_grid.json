@@ -1,0 +1,14 @@
+[
+  {"ent_coef": 0.01, "learning_rate": 0.0001},
+  {"ent_coef": 0.01, "learning_rate": 0.0003},
+  {"ent_coef": 0.01, "learning_rate": 0.001},
+  {"ent_coef": 0.05, "learning_rate": 0.0001},
+  {"ent_coef": 0.05, "learning_rate": 0.0003},
+  {"ent_coef": 0.05, "learning_rate": 0.001},
+  {"ent_coef": 0.1, "learning_rate": 0.0001},
+  {"ent_coef": 0.1, "learning_rate": 0.0003},
+  {"ent_coef": 0.1, "learning_rate": 0.001},
+  {"ent_coef": 0.2, "learning_rate": 0.0001},
+  {"ent_coef": 0.2, "learning_rate": 0.0003},
+  {"ent_coef": 0.2, "learning_rate": 0.001}
+]
