@@ -131,12 +131,26 @@ class PortfolioV003Variant:
             ))
 
         rl_added = False
+        algorithm = str(exp.get("algorithm", "PPO")).strip()
+        is_maskable = algorithm.upper() in ("MASKABLEPPO", "MASKABLE_PPO")
         if ctx.artifact_path is not None and ctx.artifact_path.exists():
             try:
-                from stable_baselines3 import PPO
-                trained_model = PPO.load(str(ctx.artifact_path))
-                trained_id = ctx.model_id
-                policies.append(_TrainedPpoWrapper(trained_model, trained_id))
+                if is_maskable:
+                    # FEAT-32 M3: sb3-contrib MaskablePPO inference.
+                    # Mirrors v002 FEAT-29 MaskablePpoSelectorScorer:
+                    # the wrapper rebuilds the same mask the trainer
+                    # used and routes it through model.predict().
+                    from sb3_contrib import MaskablePPO  # type: ignore[import-not-found]
+                    trained_model = MaskablePPO.load(str(ctx.artifact_path))
+                    trained_id = ctx.model_id
+                    policies.append(_TrainedMaskablePpoWrapper(
+                        trained_model, trained_id,
+                    ))
+                else:
+                    from stable_baselines3 import PPO
+                    trained_model = PPO.load(str(ctx.artifact_path))
+                    trained_id = ctx.model_id
+                    policies.append(_TrainedPpoWrapper(trained_model, trained_id))
                 rl_added = True
             except Exception as e:  # pragma: no cover
                 _log.warning("portfolio_v003 trained model load failed: %s", e)
@@ -174,6 +188,11 @@ class PortfolioV003Variant:
             sampler_seed=0,
         )
         obs, _info = env.reset()
+        # FEAT-32 M3: bind env on the maskable wrapper so its decide()
+        # can route env.action_masks() through model.predict(). Vanilla
+        # wrappers ignore set_env (or don't define it).
+        if hasattr(policy, "set_env"):
+            policy.set_env(env)
         rewards: list[float] = []
         actions_taken: list[str] = []
         per_action_counts = [0] * (1 + max_top_k)
@@ -252,4 +271,41 @@ class _TrainedPpoWrapper:
 
     def decide(self, obs) -> int:
         action, _ = self._model.predict(obs, deterministic=True)
+        return int(action)
+
+
+class _TrainedMaskablePpoWrapper:
+    """FEAT-32 M3: adapts an sb3-contrib MaskablePPO model into the
+    policy.decide() interface. Rebuilds the same action mask the
+    trainer used (via ``env.action_masks()``) and routes it through
+    ``model.predict(obs, action_masks=mask)`` so eval-time inference
+    matches the masking the policy was trained under.
+
+    Mirrors v002's ``MaskablePpoSelectorScorer``. The eval loop calls
+    ``set_env(env)`` once after ``env.reset()``; subsequent ``decide``
+    calls fetch the mask from the bound env (which advances per-step
+    inside ``env.step``)."""
+    def __init__(self, model, model_id: str) -> None:
+        self._model = model
+        self.model_id = model_id
+        self._env = None
+
+    def set_env(self, env) -> None:
+        self._env = env
+
+    def decide(self, obs) -> int:
+        import numpy as np
+        mask = None
+        if self._env is not None and hasattr(self._env, "action_masks"):
+            mask = self._env.action_masks()
+        if mask is None:
+            action, _ = self._model.predict(obs, deterministic=True)
+        else:
+            action, _ = self._model.predict(
+                obs, deterministic=True, action_masks=mask,
+            )
+        # MaskablePPO.predict returns either a scalar or a 1-element
+        # array depending on the obs shape; coerce to scalar.
+        if isinstance(action, np.ndarray):
+            action = action.item() if action.size == 1 else int(action[0])
         return int(action)

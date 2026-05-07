@@ -10,7 +10,14 @@
 # numbers can be compared apples-to-apples once M3 lands.
 experiment:
   name: ppo_portfolio_v003
-  algorithm: PPO
+  # FEAT-32 M3: MaskablePPO is the M3 algorithm of record. The
+  # ChronologicalSwingEnv exposes ``action_masks()`` returning
+  # [True, fired_slot_0, ..., fired_slot_K-1] so the policy cannot
+  # waste probability mass on 'take top-k' actions when fewer than
+  # k packs fired today. The trainer routes via cfg.algorithm; the
+  # variant's _TrainedMaskablePpoWrapper rebuilds the mask at
+  # inference. Mirrors v002 FEAT-29.
+  algorithm: MaskablePPO
   policy: MlpPolicy
   feature_pipeline: equities_features_v001
   universe: starter_equities

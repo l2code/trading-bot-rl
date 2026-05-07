@@ -616,3 +616,135 @@ def test_variant_evaluate_runs_baselines_on_synthetic_window():
     for r in results:
         assert r.cost_stress_multiplier == 1.0
         assert r.extras.get("variant") == "portfolio_v003"
+
+
+# ---------------------------------------------------------------------
+# FEAT-32 M3: action masking (MaskablePPO infrastructure)
+# ---------------------------------------------------------------------
+def test_env_action_masks_shape():
+    """Mask is a 1-D bool array of size 1 + max_top_k."""
+    env = _build_minimal_env(max_top_k=2)
+    env.reset()
+    import numpy as np
+    mask = env.action_masks()
+    assert isinstance(mask, np.ndarray)
+    assert mask.dtype == bool
+    assert mask.shape == (3,)
+
+
+def test_env_action_masks_no_op_always_legal():
+    """Action 0 (no-op) is always True regardless of slate state."""
+    env = _build_minimal_env(max_top_k=2)
+    env.reset()
+    mask = env.action_masks()
+    assert bool(mask[0]) is True
+    # Even after stepping
+    env.step(0)
+    mask2 = env.action_masks()
+    assert bool(mask2[0]) is True
+
+
+def test_env_action_masks_top1_legal_when_one_pack_fires():
+    """Action 1 ('take top-1') is True iff today's slate has ≥1 pack."""
+    env = _build_minimal_env(n_days=4, n_symbols=3, n_packs_per_day=1, max_top_k=2)
+    env.reset()
+    mask = env.action_masks()
+    # Test fixture builds 1 pack/day → mask = [T, T, F]
+    assert bool(mask[0]) is True
+    assert bool(mask[1]) is True
+    assert bool(mask[2]) is False  # only 1 pack today, can't take top-2
+
+
+def test_env_action_masks_top2_legal_when_two_packs_fire():
+    """Action 2 ('take top-2') is True iff today's slate has ≥2 packs."""
+    env = _build_minimal_env(n_days=4, n_symbols=3, n_packs_per_day=2, max_top_k=2)
+    env.reset()
+    mask = env.action_masks()
+    # Fixture builds 2 packs/day → mask = [T, T, T]
+    assert bool(mask[0]) is True
+    assert bool(mask[1]) is True
+    assert bool(mask[2]) is True
+
+
+def test_env_action_masks_only_no_op_when_no_episode():
+    """Outside an active episode, mask is [True, False, ...]."""
+    env = _build_minimal_env(max_top_k=2)
+    # Don't reset — simulate "before reset" state
+    mask = env.action_masks()
+    assert bool(mask[0]) is True
+    assert bool(mask[1]) is False
+    assert bool(mask[2]) is False
+
+
+def test_env_action_masks_after_terminal_state_returns_no_op_only():
+    """After episode ends (day_idx >= len(episode_days)), mask is no-op only."""
+    env = _build_minimal_env(n_days=3, max_top_k=2)
+    env.reset()
+    # Step through to terminate
+    done = False
+    while not done:
+        _, _, terminated, truncated, _ = env.step(0)
+        done = bool(terminated) or bool(truncated)
+    mask = env.action_masks()
+    assert bool(mask[0]) is True
+    assert bool(mask[1]) is False
+
+
+def test_env_action_masks_max_top_k_3():
+    """Generalize to max_top_k=3: mask shape = 4, action 3 legal only with ≥3 packs."""
+    env = _build_minimal_env(n_days=4, n_symbols=4, n_packs_per_day=2, max_top_k=3)
+    env.reset()
+    mask = env.action_masks()
+    assert mask.shape == (4,)
+    assert bool(mask[0]) is True
+    assert bool(mask[1]) is True
+    assert bool(mask[2]) is True
+    # Only 2 packs/day → action 3 is illegal
+    assert bool(mask[3]) is False
+
+
+def test_trained_maskable_ppo_wrapper_routes_action_masks():
+    """The wrapper calls env.action_masks() and passes them through
+    model.predict()."""
+    import numpy as np
+
+    from rl_swing.rl.variants.portfolio_v003 import _TrainedMaskablePpoWrapper
+
+    captured = {"mask": None}
+
+    class _StubMaskableModel:
+        def predict(self, obs, deterministic=True, action_masks=None):  # noqa: ARG002
+            captured["mask"] = action_masks
+            return np.array([1]), None
+
+    class _StubEnv:
+        def action_masks(self):
+            return np.array([True, True, False], dtype=bool)
+
+    wrap = _TrainedMaskablePpoWrapper(_StubMaskableModel(), "test_masked")
+    wrap.set_env(_StubEnv())
+    a = wrap.decide(np.zeros(12))
+    assert a == 1
+    assert captured["mask"] is not None
+    assert list(captured["mask"]) == [True, True, False]
+
+
+def test_trained_maskable_ppo_wrapper_falls_back_when_no_env():
+    """Without set_env, wrapper still works (passes no mask)."""
+    import numpy as np
+
+    from rl_swing.rl.variants.portfolio_v003 import _TrainedMaskablePpoWrapper
+
+    captured = {"mask": None, "called": False}
+
+    class _StubMaskableModel:
+        def predict(self, obs, deterministic=True, action_masks=None):  # noqa: ARG002
+            captured["mask"] = action_masks
+            captured["called"] = True
+            return np.array([0]), None
+
+    wrap = _TrainedMaskablePpoWrapper(_StubMaskableModel(), "test_masked")
+    a = wrap.decide(np.zeros(12))
+    assert a == 0
+    assert captured["called"] is True
+    assert captured["mask"] is None  # no env bound → no mask passed
