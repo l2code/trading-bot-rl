@@ -28,7 +28,7 @@ function, in priority order:
 3. **Reproducibility.** Same experiment YAML + same seed = same
    numbers, every time. Kaggle and local must agree to the bit on
    smoke runs.
-4. **Test discipline.** 273 tests today; coverage floor is 85%.
+4. **Test discipline.** 276 tests today; coverage floor is 85%.
    Every new variant ships with its own test module.
 
 What this project explicitly does *not* yet optimize for:
@@ -77,11 +77,32 @@ For findings, run results, RFC outcomes, and decisions, see
 > broke into take-everything). Masking is necessary but not
 > sufficient — default ent_coef=0.01 looks too low.
 
-> **Phase 1 next:** #30 supervised ranker baseline (task #47,
-> local-only). Then #8 Optuna sweep on `ent_coef` + `lr` against
-> the masked variant (acceptance: diversification on ≥3-of-5
-> seeds). v1 PPO and v2 unmasked PPO are closed for further
-> compute at default hyperparams.
+> **Phase 1 step 2 landed (#30 supervised ranker baseline): NO_GO.**
+> sklearn HistGB on slate features + per-slot fields → realized
+> risk-adjusted return; argmax with skip-at-0. NO_GO vs random (3
+> material regressions on return / sharpe / PF). Also DOES NOT beat
+> masked-PPO. **Important refinement to the masked-PPO finding:**
+> the trained masked-PPO is *bit-identical* (every metric to 6
+> decimals) to `selector_baseline_first_fired` — a 3-line "take
+> the lowest-index fired strategy" rule. The masked-PPO didn't
+> learn anything beyond first_fired. SHADOW_ONLY still stands
+> (gate output + tier rules unchanged) but the "PPO learned
+> something" reading is wrong.
+
+> **Phase 1 next** (revised after the supervised NO_GO + bit-
+> identity finding, ordered by EV):
+> 1. **#7 cross-strategy agreement features** — highest-leverage.
+>    Current obs gives per-slot features but not "do strategies
+>    agree on this (symbol, date)." Cheaper than architectural
+>    work and could shift both PPO and ranker verdicts.
+> 2. **#8 Optuna sweep on masked-PPO** with a tightened
+>    acceptance criterion: must clear the gate vs random AND beat
+>    `first_fired` on absolute composite score.
+> 3. **#34 set/attention or #32 chronological v3** only if (1)
+>    and (2) both fail.
+>
+> v1 PPO, v2 unmasked PPO, and the v0 supervised ranker are all
+> closed for further compute at default hyperparams.
 
 Diary entries linked from `docs/scorecard.md`. Narrative findings
 live in `research/CHANGELOG.md` and the per-entry diary files —

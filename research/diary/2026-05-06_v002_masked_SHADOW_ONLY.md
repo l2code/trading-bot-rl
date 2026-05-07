@@ -7,6 +7,21 @@
 **Run:** Kaggle private kernel `crazypenguin/rl-swing-v002-maskableppo-phase-1-private`
 **Trainer commit at run time:** `e271eb5` (post FEAT-29 scaffold + FIX-68 alias fallback)
 
+> **Addendum (2026-05-06, post-#30 supervised ranker run):** the
+> trained masked-PPO is **bit-identical** on every test-2022 metric
+> to `selector_baseline_first_fired` (a 3-line "take the lowest-
+> index fired strategy" rule): score 0.690470, total_return
+> +4.875414, per_strategy_take_counts [1423, 79, 278]. The masked-
+> PPO didn't learn anything beyond `first_fired`. The SHADOW_ONLY
+> verdict still stands (the gate output is what it is, and the
+> data tier is still exploratory yfinance), but the implied "PPO
+> learned something" reading is wrong. See
+> [`2026-05-06_v002_masked_supervised_ranker_NO_GO.md`](2026-05-06_v002_masked_supervised_ranker_NO_GO.md)
+> for the bit-identity check and the three concrete next steps
+> (#7 cross-strategy agreement features as the highest-leverage
+> intervention; #8 Optuna with a tightened acceptance criterion;
+> #34 architectural moves only if both fail).
+
 ---
 
 ## Question

@@ -10,7 +10,7 @@ Last update: 2026-05-06 after applying SDLC lessons (issue #1).
 - **Pluggable variant architecture.** `TrainingVariant` + component
   registry means new variants are one new file plus one registry
   entry. v1 (filter) and v2 (selector) live side by side cleanly.
-- **Test discipline.** 273 tests today. Coverage floor 85%. Every
+- **Test discipline.** 276 tests today. Coverage floor 85%. Every
   variant ships with its own test module.
 - **Pure-function reward + cost models.** `RewardModel` and
   `EquityExecutionModel` are stateless dataclasses; they run
@@ -60,7 +60,8 @@ Last update: 2026-05-06 after applying SDLC lessons (issue #1).
 | per-strategy training-EV analysis | exploratory (yfinance) | partial-H2 (numbers superseded; ranking stands) | [`2026-05-06_per_strategy_training_ev.md`](../research/diary/2026-05-06_per_strategy_training_ev.md) |
 | `filter_v001` (post-Phase-0) | exploratory (yfinance) | **FINAL_NO_GO** | [`2026-05-06_v001_filter_post_phase0_FINAL_NO_GO.md`](../research/diary/2026-05-06_v001_filter_post_phase0_FINAL_NO_GO.md) |
 | `selector_v002` (post-Phase-0) | exploratory (yfinance) | **FINAL_NO_GO** | [`2026-05-06_v002_selector_post_phase0_FINAL_NO_GO.md`](../research/diary/2026-05-06_v002_selector_post_phase0_FINAL_NO_GO.md) |
-| `selector_v002_masked` (FEAT-29 / Phase 1) | exploratory (yfinance) | **SHADOW_ONLY** | [`2026-05-06_v002_masked_SHADOW_ONLY.md`](../research/diary/2026-05-06_v002_masked_SHADOW_ONLY.md) |
+| `selector_v002_masked` (FEAT-29 / Phase 1) | exploratory (yfinance) | **SHADOW_ONLY** (bit-identical to `first_fired` baseline — see addendum) | [`2026-05-06_v002_masked_SHADOW_ONLY.md`](../research/diary/2026-05-06_v002_masked_SHADOW_ONLY.md) |
+| `selector_baseline_supervised` (FEAT-30 / Phase 1) | exploratory (yfinance) | **NO_GO** | [`2026-05-06_v002_masked_supervised_ranker_NO_GO.md`](../research/diary/2026-05-06_v002_masked_supervised_ranker_NO_GO.md) |
 
 > **Phase 0 fully closed.** Both post-Phase-0 entries are
 > `FINAL_NO_GO` with audit-v2 / phase0-final metrics (daily-P&L
@@ -69,14 +70,16 @@ Last update: 2026-05-06 after applying SDLC lessons (issue #1).
 > trained PPO is bit-identical to `baseline_always_take_100`
 > (material-DD regression caps verdict). v2 unmasked trained PPO is
 > bit-identical to `selector_baseline_always_skip` (3-metric
-> material regression). Phase 1 step 1 (#29 MaskablePPO) **landed
-> SHADOW_ONLY** — Phase-24 gate output GO (4-of-5 improved, no
-> material regressions); per_strategy_take_counts diversifies; but
-> tier-bound to exploratory (yfinance can't earn GO without WRDS)
-> and seed-stability is poor (1 of 3 seeds found a productive
-> policy and even that one was transient). Phase 1 next: #30
-> supervised ranker baseline, then #8 Optuna sweep against the
-> masked variant.
+> material regression). Phase 1 step 1 (#29 MaskablePPO) landed
+> SHADOW_ONLY — Phase-24 gate output GO (4-of-5 improved, no
+> material regressions); but **bit-identical to
+> `selector_baseline_first_fired`** (3-line baseline: take the
+> lowest-index fired strategy) — see the masked-PPO diary
+> addendum. Phase 1 step 2 (#30 supervised ranker) landed NO_GO
+> — 3 material regressions vs random; doesn't beat masked-PPO.
+> Phase 1 next (revised): #7 cross-strategy agreement features,
+> then #8 Optuna with tightened acceptance criterion ("beat
+> first_fired absolute, not just random gate-relative").
 
 ## Roadmap progress
 

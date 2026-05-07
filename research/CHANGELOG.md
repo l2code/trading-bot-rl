@@ -29,6 +29,61 @@ codifies the rule.
 
 ---
 
+## 2026-05-06 (Phase 1, late evening) — RESEARCH: supervised ranker NO_GO — masked-PPO bit-identical to first_fired baseline
+
+**Issue:** [#30](https://github.com/l2code/trading-bot-rl/issues/30) (supervised half closed; LinUCB sub-RFC stays open)
+**Run:** local on Loki — sklearn `HistGradientBoostingRegressor` fit on 28,219 (pack × fired strategy) rows in 0.8s; in-sample MSE 0.01671
+**Diary:** [`2026-05-06_v002_masked_supervised_ranker_NO_GO.md`](diary/2026-05-06_v002_masked_supervised_ranker_NO_GO.md)
+
+Phase 1 step 2. Trained the supervised ranker baseline per the
+operator's FEAT-30 scope (slate features + per-slot fields →
+realized risk-adjusted return; argmax with skip threshold at 0).
+Two findings:
+
+1. **Ranker is NO_GO vs `selector_baseline_random`** — 3 material
+   regressions (return -1.35, sharpe -2.73, PF -1.17). The ranker
+   is genuinely selective (60.85% take rate vs random's 69.41%)
+   but its discrimination is wrong-directional — it filters out
+   winners along with losers. Total return drops to +0.82 vs
+   random's +2.17.
+
+2. **Masked-PPO is bit-identical to `selector_baseline_first_fired`.**
+   Same score (0.690470), same return (+4.875414), same per_strat
+   [1423, 79, 278] to 6 decimals. The "trained" Kaggle 500k×3
+   masked-PPO learned exactly the deterministic-priority rule
+   "take the lowest-index strategy that fired." This refines the
+   masked-PPO SHADOW_ONLY verdict: the strong gate-pass (4-of-5
+   improved vs random) is a property of the first_fired rule, not
+   of the RL machinery. Addendum on the SHADOW_ONLY diary flags
+   this; verdict still SHADOW_ONLY (gate output + tier rules
+   unchanged), but the implied "PPO learned something" reading is
+   wrong. The supervised ranker also doesn't beat masked-PPO
+   (NO_GO with 3 material regressions in that direction too), so
+   the operator's "RL machinery isn't earning its complexity"
+   framing on #30 doesn't fire either.
+
+The much-more-important finding: **both selector architectures
+(masked-PPO + supervised ranker) fail the Phase-24 gate vs random.**
+Random's apparent dominance is almost entirely from lower max_DD
+(0.156 vs 0.196-0.199). Random's lower DD is from skipping ~30% of
+fired packs uniformly, which acts as portfolio-level noise
+reduction. None of the trained policies beat that.
+
+Recommendation per the diary, ordered by EV:
+
+1. **#7 cross-strategy agreement features.** Highest-leverage
+   intervention. The current observation gives the policy per-slot
+   features but not "do strategies agree on this (symbol, date)."
+   Cheaper than architectural work and could shift both PPO and
+   ranker verdicts.
+2. **#8 Optuna sweep against masked-PPO** with a *tightened*
+   acceptance criterion: must clear the gate vs random AND beat
+   `first_fired` on absolute composite score (currently bit-
+   identical to PPO). Operator's #8 framing was "use ranker as
+   context, not in isolation"; this diary IS that context.
+3. **#34 set/attention or #32 chronological v3** only if (1) and
+   (2) both fail.
+
 ## 2026-05-06 (Phase 1, evening) — RESEARCH: masked v2 SHADOW_ONLY — masking unsticks all-skip but seed-stability is poor
 
 **Issue:** [#29](https://github.com/l2code/trading-bot-rl/issues/29)
