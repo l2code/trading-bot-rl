@@ -1,3 +1,12 @@
+> # ⚠ [CORRECTION 2026-05-07 — FIX-#78]
+>
+> **The numbers in this diary were computed on `synthetic_momentum`, not yfinance.**
+> The "bit-identical to first_fired" finding for masked-PPO **survives** on
+> yfinance (also bit-identical there). The supervised HistGB ranker's relative
+> behavior changes: on yfinance it's the *least bad* trained policy (improved=3
+> on the gate, vs everything else's 1) but still **NO_GO** (2 material regressions
+> vs random). See [`2026-05-07_d4_canonical_yfinance_rebaseline.md`](2026-05-07_d4_canonical_yfinance_rebaseline.md).
+
 # RESEARCH-030 — supervised ranker baseline for v002 (Phase 1 step 2)
 
 **Date:** 2026-05-06

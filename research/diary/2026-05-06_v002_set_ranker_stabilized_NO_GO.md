@@ -1,3 +1,26 @@
+> # ⚠ [CORRECTION 2026-05-07 — FIX-#78] — KEY CLAIM INVALIDATED
+>
+> **The numbers in this diary were computed on `synthetic_momentum`, not yfinance.**
+> Two of the three honest findings re-evaluated on yfinance:
+>
+> - **"DD lower than random IS reproducible"** — **FALSE on yfinance.** Synthetic:
+>   DD 0.136 vs random 0.156. Yfinance: DD **0.832** vs random's **0.704** —
+>   set_ranker has HIGHER drawdown than random on real 2022 data. The "first
+>   trained policy with DD ≤ random's" claim was a synthetic-data artifact.
+> - **"Stable per_strat distribution distinct from first_fired"** — **survives on yfinance.**
+>   Yfinance per_strat: [946, 34, 54] vs first_fired's [1127, 32, 40] — still
+>   distinct. The DeepSets architecture is genuinely doing selection.
+> - **"5-of-5 gate-pass on absolute return is NOT reproducible"** — confirmed
+>   on yfinance too: 1-of-5 improved, 2 material regressions vs random. NO_GO at gate.
+>
+> The "highest composite score 0.7331 of any policy ever tested" claim was a
+> synthetic-data artifact. Yfinance composite is -0.193, lower than random's -0.185.
+>
+> The PR-1b stabilization (multi-seed loop + LR warmup + grad clip + feature
+> standardization) is still good engineering and remains in the codebase. The
+> verdict numbers are wrong. See
+> [`2026-05-07_d4_canonical_yfinance_rebaseline.md`](2026-05-07_d4_canonical_yfinance_rebaseline.md).
+
 # RESEARCH-034b — set ranker B2 stabilization (FEAT-34 PR-1b)
 
 **Date:** 2026-05-06

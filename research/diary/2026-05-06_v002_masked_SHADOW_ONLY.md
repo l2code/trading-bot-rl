@@ -1,7 +1,26 @@
+> # ⚠ [CORRECTION 2026-05-07 — FIX-#78]
+>
+> **The numbers in this diary were computed on `synthetic_momentum`, not yfinance.**
+> `validate_from_experiment` silently defaulted to a synthetic provider when the
+> YAML omitted `data_provider`. Smoking gun: bnh SPY = +0.187 (synthetic) vs
+> real 2022 SPY = -19%.
+>
+> **Canonical yfinance 2022 numbers:** see
+> [`2026-05-07_d4_canonical_yfinance_rebaseline.md`](2026-05-07_d4_canonical_yfinance_rebaseline.md).
+>
+> **What survives on yfinance:** the trained masked-PPO is bit-identical to
+> `selector_baseline_first_fired` on real data too. The 4-of-5 gate-pass that
+> motivated the SHADOW_ONLY verdict was synthetic-only; on yfinance the policy
+> is **NO_GO** (1-of-5 improved, 2 material regressions vs random).
+>
+> Verdict in scorecard / CLAUDE.md §2 has been updated to **NO_GO** to match
+> the canonical yfinance evidence. The original SHADOW_ONLY framing below is
+> preserved for audit-trail purposes.
+
 # RESEARCH-029 — v002 selector with MaskablePPO action masking (Phase 1)
 
 **Date:** 2026-05-06
-**Verdict:** **SHADOW_ONLY**
+**Verdict:** **SHADOW_ONLY** (synthetic-only — see correction banner; real yfinance is **NO_GO**)
 **Issue:** [#29](https://github.com/l2code/trading-bot-rl/issues/29)
 **Variant:** `selector_v002_masked` (FEAT-29 scaffold landed in PR #67)
 **Run:** Kaggle private kernel `crazypenguin/rl-swing-v002-maskableppo-phase-1-private`

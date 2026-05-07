@@ -29,6 +29,76 @@ codifies the rule.
 
 ---
 
+## 2026-05-07 (FIX-#78 contamination + 4-step recovery) — STRUCTURAL: every Phase 1 step 1 → Phase 3 step 1 PR-1c verdict was synthetic; 6 diaries corrected
+
+**Issue:** [#78](https://github.com/l2code/trading-bot-rl/issues/78)
+**PRs:** [#79](https://github.com/l2code/trading-bot-rl/pull/79) (step 1 guardrail), [#80](https://github.com/l2code/trading-bot-rl/pull/80) (step 2 YAML), [#81](https://github.com/l2code/trading-bot-rl/pull/81) (step 3 rebaseline diary), this PR (step 4 corrections)
+**Diary:** [`2026-05-07_d4_canonical_yfinance_rebaseline.md`](diary/2026-05-07_d4_canonical_yfinance_rebaseline.md)
+
+**Project-wide research-integrity finding.** `validate_from_experiment`
+silently defaulted to `synthetic_momentum` whenever the experiment YAML
+omitted `data_provider` (which every selector_v002* YAML did). This
+contaminated 6 diary verdicts (PR #70/#71/#72/#73/#74/#75) plus the
+PR #76 threshold-sweep analysis: trained on yfinance, post-training
+gate-evaluated on synthetic. Smoking gun: `buy_and_hold_return(SPY,
+2022)` reported +0.187 (synthetic) vs real -0.186 (SPY actually fell
+~19% in 2022).
+
+**4-step recovery:**
+
+  1. **Step 1 (PR #79):** added `--test-start` / `--test-end` /
+     `--data-provider` CLI flags PLUS a defensive guardrail —
+     `validate_from_experiment` refuses to default to synthetic for
+     selector-class variants unless `allow_synthetic_validation=True`.
+     3 new unit tests cover the branches.
+  2. **Step 2 (PR #80):** added `data_provider: yfinance_daily` to
+     the two selector YAMLs (`ppo_selector_v002.yaml`,
+     `ppo_selector_v002_masked.yaml`).
+  3. **Step 3 (PR #81):** re-ran the canonical 2022 Phase-24 gate on
+     real yfinance for every existing artifact. Wrote rebaseline
+     diary documenting what survives and what doesn't.
+  4. **Step 4 (this PR):** prepended `[CORRECTION]` banners to all 6
+     contaminated diaries pointing at the rebaseline; updated
+     CLAUDE.md §2 status table; updated docs/scorecard.md
+     research-state table with strikethrough on superseded verdicts.
+
+**What survives the synthetic→yfinance correction:**
+
+  - Masked-PPO is bit-identical to `selector_baseline_first_fired` on
+    yfinance just like on synthetic. PR #71's "RL machinery learned
+    only first_fired" finding holds on real data.
+  - Phase 1 closure verdict (PR #73 NO_GO at strict acceptance) stands.
+  - Set_ranker's per_strat distribution distinct from first_fired
+    survives ([946, 34, 54] vs [1127, 32, 40] on yfinance) — the
+    DeepSets architecture is doing real selection beyond priority order.
+
+**What does NOT survive:**
+
+  - PR #74's "first trained policy on yfinance to clear all 5
+    Phase-24 gate metrics vs random" — false on yfinance (1-of-5,
+    2 material regressions).
+  - PR #75's "lowest max_DD of any trading policy" — false on
+    yfinance (set_ranker DD 0.832 vs random's 0.704; HIGHER not
+    lower). The apparent low-DD property was a synthetic artifact.
+  - PR #75's "highest composite score 0.7331 of any policy ever
+    tested" — false on yfinance (-0.193, below random's -0.185).
+
+**Operator implications:**
+
+  - "Path C: ship low-DD selector behind operator approval" —
+    invalidated. Set_ranker is NOT low-DD on real yfinance.
+  - "D2: ratify set_ranker as SHADOW_ONLY shadow research lane" —
+    invalidated as written. Either close or rewrite to ratify the
+    "selection beyond priority order" property without the low-DD claim.
+  - "D4 multi-cycle WF on existing artifacts" — even more important
+    now. Run 2021/2022/2023/2024 on real yfinance to see whether
+    random's apparent yfinance win generalizes or is regime-specific.
+
+**State after this PR:** main is on canonical-yfinance numbers. CLAUDE.md
+§2 reflects rebaselined verdicts. 6 diaries carry `[CORRECTION]` banners
+pointing at the rebaseline. 289 tests still passing. No live deploys, no
+in-flight compute. D4 multi-cycle becomes the next concrete piece of work.
+
 ## 2026-05-06 (Phase 3 step 1 PR-1b) — RESEARCH: set ranker B2 stabilization NO_GO at gate; PR-1's lucky checkpoint not reproducible, but DD-lower-than-random is
 
 **Issue:** [#34](https://github.com/l2code/trading-bot-rl/issues/34) (PR-1b stabilization)
