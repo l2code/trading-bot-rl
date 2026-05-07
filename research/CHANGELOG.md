@@ -29,6 +29,53 @@ codifies the rule.
 
 ---
 
+## 2026-05-06 (Phase 1 closure) — RESEARCH: masked-PPO FEAT-7 tie-breaker NO_GO; v002 selector closes for further compute
+
+**Issue:** [#29](https://github.com/l2code/trading-bot-rl/issues/29) (decisive evidence)
+**Run:** Kaggle private kernel `crazypenguin/rl-swing-v002-masked-feat7-tiebreak` — 3 seeds × 500k timesteps, 45 min wall-time
+**Diary:** [`2026-05-06_v002_masked_feat7_tiebreaker_NO_GO.md`](diary/2026-05-06_v002_masked_feat7_tiebreaker_NO_GO.md)
+
+Phase 1 closure. Per the operator's "Path B, single tie-breaker
+run, strict acceptance, information gain not rescue mission"
+framing (chat 2026-05-06), retrained masked-PPO on the FEAT-7
+observation (+9 dims of pack-level + per-slot agreement features).
+Strict acceptance — all five required:
+
+  [1] beat random on Phase-24 gate              → PASS (4-of-5)
+  [2] beat first_fired on absolute composite    → FAIL (tied 0.690470)
+  [3] NOT bit-identical to first_fired          → FAIL (every metric bit-equal)
+  [4] nontrivial strategy distribution           → FAIL ([1423, 79, 278] = first_fired's exactly)
+  [5] ≥2 of 3 seeds usable                       → FAIL (1 of 3, and seed 33 is take-everything)
+
+**4 of 5 fail. NO_GO.**
+
+The trained masked-PPO with FEAT-7 features is bit-identical to
+selector_baseline_first_fired on every metric to 6 decimals — same
+numbers as the pre-FEAT-7 masked-PPO (PR #70 SHADOW_ONLY). The +9
+informative dims did nothing for PPO at default ent_coef=0.01.
+Seed 11 actually did *worse* than its pre-FEAT-7 self (briefly took
+trades at step 50k then collapsed; vs prior run's productive
+checkpoint at step 300k). Seed 22: stayed all-skip across 500k
+steps. Seed 33: take-everything from step 50k, never improved.
+
+**v002 selector with default-hyperparam MlpPolicy is structurally
+exhausted on yfinance.** Both the unmasked and masked variants
+converge to first_fired regardless of feature set. Adding more
+features without changing the model class or hyperparameters won't
+fix this — the architecture trivially encodes "always pick slot 0
+of fired slots" and that's the local optimum it lands in.
+
+Per the diary's recommendation (operator's pre-agreed Path B):
+close v002 PPO for further default-hyperparam compute. Pivot to
+Phase 3 architectural work, ordered: #34 set/attention slate
+encoder → #32 portfolio-aware chronological v3 → optionally #27
+Optuna formally if anyone wants the "tuning alone cannot fix this"
+negative result on record.
+
+The supervised ranker baseline (FEAT-30 + FEAT-7) stays available
+as a comparison floor for Phase 3 work; even though it's NO_GO vs
+random, it carries the slight selectivity that PPO doesn't.
+
 ## 2026-05-06 (Phase 1 step 3) — RESEARCH: cross-strategy agreement features NO_GO; gap to random halved but not flipped
 
 **Issue:** [#7](https://github.com/l2code/trading-bot-rl/issues/7) (agreement-features half closed; pairwise-one-hot + multi-day variants stay open)

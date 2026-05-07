@@ -94,17 +94,28 @@ For findings, run results, RFC outcomes, and decisions, see
 > `pack_all_fired`, `pack_same_symbol_strategy_agreement`) + per-slot
 > (`slot_is_top_signal`, `slot_rank_by_signal`) features wired into
 > the obs builder + supervised ranker. Re-trained the cheap ranker;
-> result is **marginal not material**: composite 0.7107 → 0.7145,
+> result was **marginal not material**: composite 0.7107 → 0.7145,
 > sharpe +0.27, gap to `selector_baseline_random` halved (0.0079 →
 > 0.0041) but the same 3 material regressions vs random remain.
-> Diary recommendation: **Path A — pivot to Phase 3 architectural
-> work** (#34 set/attention, #32 chronological v3) instead of a
-> #27 Optuna burn. **Path B alternative** — one masked-PPO Kaggle
-> retrain on the new obs as a tie-breaker — is the operator's call.
 
-> v1 PPO, v2 unmasked PPO, the v0 supervised ranker, AND the
-> FEAT-7 supervised ranker are all closed for further compute at
-> default hyperparams. Open decision: A vs B (above).
+> **Phase 1 closure (Path B tie-breaker): NO_GO.** Operator-
+> requested single masked-PPO Kaggle retrain on the FEAT-7 obs.
+> Strict 5-criterion acceptance; **4 of 5 fail.** Trained masked-
+> PPO is *still bit-identical* to `selector_baseline_first_fired`
+> ([1423, 79, 278]; score 0.690470 to 6 decimals) — adding +9
+> informative dims did nothing for PPO at default ent_coef=0.01.
+> Seed 11 escaped briefly at step 50k then collapsed (worse than
+> pre-FEAT-7); seed 22 stayed all-skip across 500k steps; seed 33
+> went take-everything. **v002 selector with default-hyperparam
+> MlpPolicy is structurally exhausted on yfinance.**
+
+> **Phase 1 closes here.** Pivot to Phase 3 architectural work:
+> #34 set/attention slate encoder → #32 portfolio-aware
+> chronological v3 → optionally #27 Optuna formally if the
+> "tuning alone cannot fix this" negative result is worth
+> recording. v1 PPO, v2 unmasked PPO, masked-PPO (with and without
+> FEAT-7), and the supervised ranker are all closed for further
+> default-hyperparam compute.
 
 Diary entries linked from `docs/scorecard.md`. Narrative findings
 live in `research/CHANGELOG.md` and the per-entry diary files —
