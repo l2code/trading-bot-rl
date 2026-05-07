@@ -101,14 +101,36 @@ def train(
               help="Specific trained model id (defaults to experiment.name).")
 @click.option("--report-dir", type=click.Path(),
               default="data/reports", show_default=True)
-def validate(experiment_path: str, model_id: str | None, report_dir: str) -> None:
+@click.option("--test-start", "test_start", type=str, default=None,
+              help="Override the experiment YAML's test_start (YYYY-MM-DD). "
+                   "Useful for multi-cycle walk-forward without per-year YAMLs.")
+@click.option("--test-end", "test_end", type=str, default=None,
+              help="Override the experiment YAML's test_end (YYYY-MM-DD).")
+@click.option("--data-provider", "data_provider", type=str, default=None,
+              help="Override the experiment YAML's data_provider "
+                   "(e.g. yfinance_daily). YAML default for v002 / v002_masked "
+                   "is silently 'synthetic_momentum'; pass yfinance_daily for "
+                   "real data evaluations.")
+def validate(
+    experiment_path: str,
+    model_id: str | None,
+    report_dir: str,
+    test_start: str | None,
+    test_end: str | None,
+    data_provider: str | None,
+) -> None:
     """Run walk-forward validation + baseline comparison."""
+    from datetime import date
+
     from rl_swing.rl.validation.walk_forward import validate_from_experiment
 
     validate_from_experiment(
         experiment_path=experiment_path,
         model_id=model_id,
         report_dir=Path(report_dir),
+        test_start_override=date.fromisoformat(test_start) if test_start else None,
+        test_end_override=date.fromisoformat(test_end) if test_end else None,
+        data_provider_override=data_provider,
     )
 
 

@@ -285,3 +285,114 @@ def test_validate_from_experiment_writes_report(tmp_path: Path):
     )
     assert summary["experiment"] == "walkfwd_test"
     assert (tmp_path / "reports").exists()
+
+
+# ---------------------------------------------------------------------
+# FIX-#78: guardrail against silent synthetic_momentum fallback for
+# selector-class variants. Selectors are decision-grade; an unset
+# data_provider must not silently produce synthetic numbers.
+def test_fix78_guardrail_fires_for_selector_without_provider(tmp_path: Path):
+    """selector_v002 YAML missing data_provider AND no caller override
+    AND no allow_synthetic_validation=True -> RuntimeError."""
+    import pytest
+
+    exp = tmp_path / "exp.yaml"
+    exp.write_text(
+        "experiment:\n"
+        "  name: guardrail_test\n"
+        "  rl_variant: selector_v002\n"
+        "  algorithm: PPO\n"
+        "  policy: MlpPolicy\n"
+        "  feature_pipeline: equities_features_v001\n"
+        "  universe: synthetic\n"
+        "  reward_config_version: r\n"
+        "  train_start: '2018-01-01'\n  train_end: '2019-01-01'\n"
+        "  validation_start: '2019-01-02'\n  validation_end: '2019-06-30'\n"
+        "  test_start: '2019-07-01'\n  test_end: '2020-06-30'\n"
+        "  total_timesteps_initial: 1000\n  total_timesteps_max: 1000\n"
+        "  eval_interval_timesteps: 1000\n"
+        "  early_stopping_patience_evaluations: 1\n"
+        "  min_validation_delta: 0.0\n"
+        "  save_best_only: true\n"
+        "  seeds: [1]\n"
+        "  hyperparams: {}\n"
+        "  cost_model: {}\n"
+        "  reward: {}\n"
+        "  artifact_root: " + str(tmp_path) + "\n"
+    )
+    # No data_provider in YAML, no override -> guardrail must fire.
+    with pytest.raises(RuntimeError, match="FIX-#78 guardrail"):
+        validate_from_experiment(
+            exp, report_dir=tmp_path / "reports", include_cost_stress=False,
+        )
+
+
+def test_fix78_guardrail_lets_filter_variant_default_to_synthetic(tmp_path: Path):
+    """Filter (v1) variants are unaffected by the guardrail — their
+    smoke tests use synthetic providers heavily and they're not
+    decision-grade in the same way the selectors are."""
+    exp = tmp_path / "exp.yaml"
+    exp.write_text(
+        "experiment:\n"
+        "  name: filter_synthetic_ok\n"
+        "  rl_variant: filter_v001\n"  # filter, not selector
+        "  algorithm: PPO\n"
+        "  policy: MlpPolicy\n"
+        "  feature_pipeline: equities_features_v001\n"
+        "  universe: synthetic\n"
+        "  reward_config_version: r\n"
+        "  train_start: '2018-01-01'\n  train_end: '2019-01-01'\n"
+        "  validation_start: '2019-01-02'\n  validation_end: '2019-06-30'\n"
+        "  test_start: '2019-07-01'\n  test_end: '2020-06-30'\n"
+        "  total_timesteps_initial: 1000\n  total_timesteps_max: 1000\n"
+        "  eval_interval_timesteps: 1000\n"
+        "  early_stopping_patience_evaluations: 1\n"
+        "  min_validation_delta: 0.0\n"
+        "  save_best_only: true\n"
+        "  seeds: [1]\n"
+        "  hyperparams: {}\n"
+        "  cost_model: {}\n"
+        "  reward: {}\n"
+        "  artifact_root: " + str(tmp_path) + "\n"
+        # NOTE: deliberately NO data_provider; should default to
+        # synthetic without firing the guardrail (filter, not selector).
+    )
+    summary = validate_from_experiment(
+        exp, report_dir=tmp_path / "reports", include_cost_stress=False,
+    )
+    assert summary["experiment"] == "filter_synthetic_ok"
+
+
+def test_fix78_guardrail_allows_explicit_synthetic_via_flag(tmp_path: Path):
+    """Selector variant + allow_synthetic_validation=True -> proceeds
+    (with a logged warning, not tested here). Smoke tests / plumbing
+    checks need this opt-in escape hatch."""
+    exp = tmp_path / "exp.yaml"
+    exp.write_text(
+        "experiment:\n"
+        "  name: selector_smoke\n"
+        "  rl_variant: selector_v002\n"
+        "  algorithm: PPO\n"
+        "  policy: MlpPolicy\n"
+        "  feature_pipeline: equities_features_v001\n"
+        "  universe: synthetic\n"
+        "  reward_config_version: r\n"
+        "  train_start: '2018-01-01'\n  train_end: '2019-01-01'\n"
+        "  validation_start: '2019-01-02'\n  validation_end: '2019-06-30'\n"
+        "  test_start: '2019-07-01'\n  test_end: '2020-06-30'\n"
+        "  total_timesteps_initial: 1000\n  total_timesteps_max: 1000\n"
+        "  eval_interval_timesteps: 1000\n"
+        "  early_stopping_patience_evaluations: 1\n"
+        "  min_validation_delta: 0.0\n"
+        "  save_best_only: true\n"
+        "  seeds: [1]\n"
+        "  hyperparams: {}\n"
+        "  cost_model: {}\n"
+        "  reward: {}\n"
+        "  artifact_root: " + str(tmp_path) + "\n"
+    )
+    summary = validate_from_experiment(
+        exp, report_dir=tmp_path / "reports", include_cost_stress=False,
+        allow_synthetic_validation=True,
+    )
+    assert summary["experiment"] == "selector_smoke"

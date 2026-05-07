@@ -239,6 +239,9 @@ def validate_from_experiment(
     report_dir: Path | None = None,
     data_provider_override: str | None = None,
     artifact_root_override: str | Path | None = None,
+    test_start_override: date | None = None,
+    test_end_override: date | None = None,
+    allow_synthetic_validation: bool = False,
     include_baselines: tuple[str, ...] = (
         "random", "always_take_100", "always_take_50", "never_take",
         # FEAT-30 + FEAT-34: opt-in selector tags. Filter (v1) variants
@@ -264,9 +267,55 @@ def validate_from_experiment(
         exp = (yaml.safe_load(f) or {}).get("experiment") or {}
 
     universe_name = exp.get("universe", "synthetic")
-    test_start = date.fromisoformat(exp["test_start"])
-    test_end = date.fromisoformat(exp["test_end"])
-    provider_name = data_provider_override or exp.get("data_provider", "synthetic_momentum")
+    # FEAT-77 (D4-b): allow CLI / caller-supplied test-window
+    # overrides without touching the YAML. Powers multi-cycle eval
+    # (loop the same canonical validate path over multiple years).
+    # Defaults to the YAML's test_start / test_end when overrides
+    # aren't passed.
+    test_start = test_start_override or date.fromisoformat(exp["test_start"])
+    test_end = test_end_override or date.fromisoformat(exp["test_end"])
+
+    # FIX-#78: guardrail against silent synthetic fallback. Prior to
+    # this fix, validate_from_experiment silently defaulted to
+    # synthetic_momentum when the YAML omitted the data_provider
+    # field (which every selector_v002* YAML did). That contaminated
+    # 7 diary verdicts (PR #70-#76) — they were trained on yfinance
+    # but post-training gate-evaluated on synthetic. The smoking gun
+    # was buy_and_hold SPY = +0.187 across 2022/2023/2024 windows
+    # (synthetic isn't year-aware at this scale; bit-identical bnh
+    # across years).
+    #
+    # New behavior: if no explicit data_provider is supplied AND the
+    # YAML omits data_provider AND the variant is selector-class, we
+    # REFUSE to proceed. Pass ``allow_synthetic_validation=True`` if
+    # you really do want a synthetic eval (smoke tests, plumbing
+    # checks). Filter (v1) variants are unaffected because their
+    # smoke tests use synthetic providers heavily.
+    explicit_provider = data_provider_override or exp.get("data_provider")
+    yaml_variant = exp.get("rl_variant", "filter_v001")
+    is_selector = yaml_variant.startswith("selector_")
+    if explicit_provider is None:
+        if is_selector and not allow_synthetic_validation:
+            raise RuntimeError(
+                "FIX-#78 guardrail: validate_from_experiment refuses to "
+                "default to 'synthetic_momentum' for selector-class variant "
+                f"{yaml_variant!r}. Selectors are decision-grade; pass an "
+                "explicit data_provider (e.g. 'yfinance_daily' or "
+                "'wrds_parquet') via --data-provider on the CLI, the "
+                "data_provider field in the YAML, or "
+                "data_provider_override=. Use "
+                "allow_synthetic_validation=True to opt in for smoke / "
+                "plumbing checks only."
+            )
+        provider_name = "synthetic_momentum"
+        if is_selector:
+            _log.warning(
+                "FIX-#78: selector variant %r evaluating on synthetic_momentum "
+                "via allow_synthetic_validation=True. NOT decision-grade.",
+                yaml_variant,
+            )
+    else:
+        provider_name = explicit_provider
 
     provider = _build_provider(provider_name)
     symbols = _load_universe(universe_name)
