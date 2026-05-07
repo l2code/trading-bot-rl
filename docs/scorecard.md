@@ -10,7 +10,7 @@ Last update: 2026-05-06 after applying SDLC lessons (issue #1).
 - **Pluggable variant architecture.** `TrainingVariant` + component
   registry means new variants are one new file plus one registry
   entry. v1 (filter) and v2 (selector) live side by side cleanly.
-- **Test discipline.** 326 tests today. Coverage floor 85%. Every
+- **Test discipline.** 335 tests today. Coverage floor 85%. Every
   variant ships with its own test module.
 - **Pure-function reward + cost models.** `RewardModel` and
   `EquityExecutionModel` are stateless dataclasses; they run

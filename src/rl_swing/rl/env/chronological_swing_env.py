@@ -327,6 +327,48 @@ class ChronologicalSwingEnv(gym.Env):
         clip = float(getattr(rm, "reward_clip", 5.0) or 5.0)
         return float(max(-clip, min(clip, reward)))
 
+    # ---- action masking (FEAT-32 M3) ---------------------------------
+    def action_masks(self) -> np.ndarray:
+        """Boolean mask over the ``Discrete(1 + max_top_k)`` action space.
+
+        Returned to ``sb3-contrib.MaskablePPO`` so the policy cannot
+        select 'take top-k' actions when fewer than k packs fired today
+        (those actions would no-op anyway via the env's
+        ``min(action, len(slate))`` clamp; masking lets the policy
+        avoid wasting probability mass on non-actions).
+
+        Mask shape: ``[True, fired_slot_0, ..., fired_slot_K-1]`` per
+        the FEAT-29 v002 pattern. Concretely:
+
+          - index 0 (no-op) is **always** True; skipping is always legal.
+          - index k (1 ≤ k ≤ max_top_k) is True iff today's slate has
+            at least k fired packs (i.e. ``len(slate) >= k``), so 'take
+            top-k' has something to take.
+
+        Vanilla PPO/DQN ignore this method, so exposing it is harmless
+        for the unmasked v003 default — masking only engages when the
+        trainer wires the env to MaskablePPO.
+
+        Edge case: when there's no current trading day (between
+        episodes, or empty episode), the mask is ``[True, False, ...]``
+        — only no-op is legal. sb3-contrib never asks for masks outside
+        an active step, but we return something defined just in case.
+        """
+        n_actions = 1 + self.max_top_k
+        if not self._episode_days or self._day_idx >= len(self._episode_days):
+            mask = np.zeros(n_actions, dtype=bool)
+            mask[0] = True
+            return mask
+        today = self._episode_days[self._day_idx]
+        slate = self._slates_by_day.get(today, [])
+        n_fired = len(slate)
+        mask = np.zeros(n_actions, dtype=bool)
+        mask[0] = True  # no-op always legal
+        for k in range(1, n_actions):
+            if n_fired >= k:
+                mask[k] = True
+        return mask
+
     def _build_obs(self, today: date) -> np.ndarray:
         slate = self._slates_by_day.get(today, [])
         # Pack-slate aggregate stats.
