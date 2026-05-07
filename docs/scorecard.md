@@ -64,7 +64,8 @@ Last update: 2026-05-06 after applying SDLC lessons (issue #1).
 | `selector_baseline_supervised` (FEAT-30 / Phase 1) | exploratory (yfinance) | **NO_GO** | [`2026-05-06_v002_masked_supervised_ranker_NO_GO.md`](../research/diary/2026-05-06_v002_masked_supervised_ranker_NO_GO.md) |
 | Cross-strategy agreement features (FEAT-7 / Phase 1) + ranker re-test | exploratory (yfinance) | **NO_GO** (marginal +0.0038 composite; gap to random halved but not flipped) | [`2026-05-06_v002_feat7_agreement_features_NO_GO.md`](../research/diary/2026-05-06_v002_feat7_agreement_features_NO_GO.md) |
 | `selector_v002_masked` retrain on FEAT-7 obs (Phase 1 closure tie-breaker) | exploratory (yfinance) | **NO_GO** (4-of-5 strict criteria fail; bit-identical to first_fired) | [`2026-05-06_v002_masked_feat7_tiebreaker_NO_GO.md`](../research/diary/2026-05-06_v002_masked_feat7_tiebreaker_NO_GO.md) |
-| `selector_baseline_set_ranker` (FEAT-34 PR-1, Phase 3) | exploratory (yfinance) | **SHADOW_ONLY** (gate GO 5-of-5 vs random; first trained policy with DD ≤ random's; PR-2 justified) | [`2026-05-06_v002_set_ranker_SHADOW_ONLY.md`](../research/diary/2026-05-06_v002_set_ranker_SHADOW_ONLY.md) |
+| `selector_baseline_set_ranker` (FEAT-34 PR-1, Phase 3) | exploratory (yfinance) | **SHADOW_ONLY** (refined by PR-1b — see next row) | [`2026-05-06_v002_set_ranker_SHADOW_ONLY.md`](../research/diary/2026-05-06_v002_set_ranker_SHADOW_ONLY.md) |
+| `selector_baseline_set_ranker` (FEAT-34 PR-1b stabilized, Phase 3) | exploratory (yfinance) | **NO_GO** at per-metric gate; **highest composite score (0.7331) of any policy**; lowest DD (0.1356) of any trading policy; per_strat genuinely distinct from first_fired | [`2026-05-06_v002_set_ranker_stabilized_NO_GO.md`](../research/diary/2026-05-06_v002_set_ranker_stabilized_NO_GO.md) |
 
 > **Phase 0 fully closed.** Both post-Phase-0 entries are
 > `FINAL_NO_GO` with audit-v2 / phase0-final metrics (daily-P&L

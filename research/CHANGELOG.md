@@ -29,6 +29,67 @@ codifies the rule.
 
 ---
 
+## 2026-05-06 (Phase 3 step 1 PR-1b) — RESEARCH: set ranker B2 stabilization NO_GO at gate; PR-1's lucky checkpoint not reproducible, but DD-lower-than-random is
+
+**Issue:** [#34](https://github.com/l2code/trading-bot-rl/issues/34) (PR-1b stabilization)
+**Run:** local on Loki — 3 seeds × 30 epochs × 15s/seed; with feature standardization + LR warmup + grad clip
+**Diary:** [`2026-05-06_v002_set_ranker_stabilized_NO_GO.md`](diary/2026-05-06_v002_set_ranker_stabilized_NO_GO.md)
+
+Operator picked B2 before B1 after PR-1 SHADOW_ONLY: stabilize
+supervised training before spending Kaggle on PPO. Implemented
+gradient clipping, LR warmup, multi-seed loop, top-1 diagnostics,
+save-best-by-val. The operator's listed asks alone did NOT
+stabilize training — MSE still exploded into 10^9-10^11 across all
+3 seeds. Root cause caught and fixed during the run: ctx features
+include raw frame fields (prices, dollar volumes) that span many
+orders of magnitude; linear layers in phi/rho produce massive
+predictions; MSE on a target in [-1, 1] dominates everything else.
+Fix: feature standardization. Train-set mean/std on ctx + slot
+blocks; transform inputs at train time; persist stats with bundle
+and apply at inference.
+
+After standardization, training is monotonically decreasing across
+all 3 seeds (val_loss in [0.0758, 0.0815]; top-1 in [0.74, 0.76]).
+**Tight clustering — reproducible.**
+
+**Three honest findings:**
+
+  1. PR-1's "DD lower than random" claim **is real and
+     reproducible**. PR-1 reported DD 0.1539; PR-1b reports DD
+     0.1356 (even better). The architecture genuinely produces a
+     low-DD trading policy on yfinance — first such result in the
+     project's history.
+  2. PR-1's "5-of-5 gate-pass on absolute return + sharpe" claim
+     is **NOT reproducible**. PR-1's high-return numbers came from
+     a take-everything operating point (94% take rate) that the
+     unstable mid-training checkpoint happened to land on.
+     Stable training converges to a selective operating point
+     (53% take rate) instead.
+  3. The architecture's stable operating point is **genuinely
+     distinct from first_fired**. PR-1b per_strat [646, 75, 218]
+     is 55% fewer Momentum trades than first_fired's [1423, 79,
+     278] — the slate framing IS doing real selection.
+
+**Verdict: NO_GO** at the per-metric Phase-24 gate (1-of-5
+improved, 2 material regressions on absolute return -0.96 and
+sharpe -1.20). But composite score 0.7331 is the highest of any
+policy ever tested on this benchmark — composite formula's DD +
+turnover components compensate for the absolute-return regression.
+A composite-vs-per-metric framework gap is implicitly filed.
+
+PR-2 (sb3 features-extractor + Kaggle PPO retrain) **still
+justified**: PPO optimizes total accumulated reward, which weighs
+differently than per-slot regression on risk-adj return. The
+supervised checkpoint's selective operating point isn't the only
+thing the encoder can express. Strict acceptance for PR-2 set at
+the gate level (beat random ≥2 of 5; not bit-identical to
+first_fired; ≥2 of 3 seeds usable) — not at PR-1's lucky-checkpoint
+level.
+
+286 tests still passing (no test changes). Trainer code now has:
+multi-seed loop, LR warmup, grad clip, feature standardization,
+top-1 diagnostics, per-seed summary in artifact metadata.
+
 ## 2026-05-06 (Phase 3 step 1 PR-1) — RESEARCH: set/slate encoder cheap diagnostic SHADOW_ONLY (first trained policy to beat random on every gate metric)
 
 **Issue:** [#34](https://github.com/l2code/trading-bot-rl/issues/34) (PR-1 only)

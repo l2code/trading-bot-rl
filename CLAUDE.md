@@ -114,28 +114,44 @@ For findings, run results, RFC outcomes, and decisions, see
 > and the supervised ranker are all closed for further
 > default-hyperparam compute.
 
-> **Phase 3 step 1 PR-1 landed (#34 set/slate encoder cheap diagnostic): SHADOW_ONLY.**
-> DeepSets-style PyTorch encoder + supervised set ranker. First
-> trained policy on yfinance to clear all five Phase-24 gate
-> metrics vs random — including LOWER max_drawdown (0.1539 vs
-> 0.1557). Per_strat distribution [1325, 73, 289] is a real
-> reallocation away from first_fired's [1423, 79, 278]. The slate
-> framing was NOT structurally exhausted; the prior collapse was
-> an MlpPolicy artifact. Cheap-diagnostic acceptance threshold
-> cleared. **PR-2 justified** — wire SlateEncoder as a sb3
-> features extractor for MaskablePPO, one Kaggle private retrain
-> (3 seeds × 500k), strict 3-criterion acceptance. Caveats in the
-> diary: training loss diverged after epoch 23 (early-stop saved
-> epoch 21); single seed; composite score formulaically still
-> trails random despite per-metric domination — none change the
-> verdict but PR-2 is the multi-seed evidence.
+> **Phase 3 step 1 PR-1 landed (#34 set/slate encoder cheap diagnostic): SHADOW_ONLY (subsequently refined by PR-1b).**
+> DeepSets-style PyTorch encoder + supervised set ranker. PR-1's
+> SHADOW_ONLY was based on a single-seed training run with end-stage
+> divergence; the early-stopped epoch-21 checkpoint produced a
+> 5-of-5 gate-pass vs random. PR-1b stabilization (next entry)
+> reproduces only some of those claims.
+
+> **Phase 3 step 1 PR-1b landed (B2 stabilization): NO_GO at gate;
+> reproducibility refines PR-1's claims.** Operator-listed asks
+> (grad clip, LR warmup, multi-seed) alone did NOT stabilize —
+> root cause was raw-scale ctx features (prices, dollar_volume).
+> Fix: feature standardization. After standardization, training
+> is monotonically decreasing across 3 seeds (val_loss [0.076,
+> 0.082]; top-1 [0.74, 0.76]). Three findings:
+> (a) **DD lower than random IS real and reproducible** (0.1356
+> vs 0.1557; even better than PR-1's 0.1539);
+> (b) **5-of-5 gate-pass on absolute return is NOT reproducible**
+> — PR-1's high-return numbers came from a take-everything
+> checkpoint (94% take rate) that unstable training happened to
+> land on; stable training converges to a selective operating
+> point (53% take rate, total_return +1.21);
+> (c) **Stable per_strat distribution [646, 75, 218] is genuinely
+> distinct from first_fired's [1423, 79, 278]** — 55% fewer
+> Momentum trades, real selection.
+> Verdict: per-metric gate NO_GO (1-of-5 improved, 2 material
+> regressions on absolute return / sharpe). BUT composite score
+> 0.7331 is the highest of any policy ever tested. PR-2 still
+> justified: PPO optimizes accumulated reward, which weighs
+> differently than per-slot regression.
 
 > **Phase 3 next:** PR-2 (sb3 features-extractor wiring + Kaggle
-> retrain). If PR-2 clears the strict gate, **#27 Optuna becomes
-> worth running** on top — finally a model class responsive to
-> tuning rather than collapsing to first_fired regardless. If PR-2
-> fails, pivot to #32 chronological v3 OR ship the supervised set
-> ranker directly as the production path.
+> retrain). Strict acceptance set at the gate level, not at PR-1's
+> lucky-checkpoint level. If PR-2 clears the gate, **#27 Optuna
+> becomes worth running** on top. If PR-2 fails, pivot to #32
+> chronological v3 OR consider shipping the supervised set ranker
+> as a "low-DD selector" production lane behind explicit operator
+> approval (despite the gate NO_GO, it has the lowest DD of any
+> trading policy on this benchmark).
 
 Diary entries linked from `docs/scorecard.md`. Narrative findings
 live in `research/CHANGELOG.md` and the per-entry diary files —
