@@ -129,9 +129,22 @@ def main() -> int:
     p.add_argument("--target-risk-pct", type=float, default=0.02)
     p.add_argument("--epochs", type=int, default=30)
     p.add_argument("--batch-size", type=int, default=256)
-    p.add_argument("--lr", type=float, default=1e-3)
+    # FEAT-34 PR-1b stabilization: lower default LR + warmup + grad clip.
+    # PR-1's lr=1e-3 caused end-stage divergence around epoch 23.
+    p.add_argument("--lr", type=float, default=5e-4,
+                   help="Base LR after warmup (PR-1b lowered from 1e-3 -> 5e-4).")
+    p.add_argument("--warmup-epochs", type=int, default=3,
+                   help="Linear LR warmup from lr/10 to lr over the first "
+                        "N epochs. 0 disables warmup.")
+    p.add_argument("--grad-clip", type=float, default=1.0,
+                   help="torch.nn.utils.clip_grad_norm_ max_norm. 0 disables.")
     p.add_argument("--embed-dim", type=int, default=32)
-    p.add_argument("--seed", type=int, default=11)
+    # PR-1b: support a comma-separated seed list (e.g. "11,22,33"). The
+    # trainer fits each seed independently and persists the best-by-val.
+    p.add_argument("--seeds", type=str, default="11",
+                   help="Comma-separated torch / numpy seeds (e.g. '11,22,33'). "
+                        "Each seed trains an independent encoder; the best-by-"
+                        "val-loss seed's weights are saved as the artifact.")
     p.add_argument("--val-frac", type=float, default=0.1,
                    help="Fraction of packs held out for early-stopping eval.")
     args = p.parse_args()
@@ -255,11 +268,37 @@ def main() -> int:
     _log.info("training set: n_packs=%d slot_feat_dim=%d ctx_dim=%d dropped=%d",
               n, X_slot.shape[-1], X_ctx.shape[-1], n_dropped)
 
-    # 3) Train.
+    # FEAT-34 PR-1b: feature standardization. The ctx features include
+    # raw frame fields (e.g. dollar_volume, prices) that span many
+    # orders of magnitude; without standardization the linear layers
+    # in phi/rho produce massive predictions and the MSE loss
+    # explodes (PR-1b diagnosis). Compute train-only mean/std (single
+    # split for all seeds — this is a feature pipeline transformation,
+    # not a per-seed data augmentation), persist with the bundle so
+    # inference applies the same transformation.
+    ctx_mean = X_ctx.mean(axis=0).astype(np.float32)
+    ctx_std = X_ctx.std(axis=0).astype(np.float32)
+    ctx_std = np.where(ctx_std < 1e-6, 1.0, ctx_std)  # avoid div-by-zero on constant columns
+    X_ctx = ((X_ctx - ctx_mean) / ctx_std).astype(np.float32)
+    # Per-slot features are mostly already in well-behaved ranges
+    # (signal_strength in [0,1], base_size_pct < 0.2, etc.), but
+    # standardize anyway for symmetry and so a future feature
+    # addition doesn't silently regress training.
+    slot_flat = X_slot.reshape(-1, X_slot.shape[-1])
+    slot_mean = slot_flat.mean(axis=0).astype(np.float32)
+    slot_std = slot_flat.std(axis=0).astype(np.float32)
+    slot_std = np.where(slot_std < 1e-6, 1.0, slot_std)
+    X_slot = ((X_slot - slot_mean) / slot_std).astype(np.float32)
+    _log.info("standardized features: ctx mean/std and per-slot mean/std computed on full train set")
+
+    # 3) Train. FEAT-34 PR-1b: multi-seed loop + LR warmup + gradient
+    # clipping + rank/top-1 diagnostics on the val set.
     import torch
     from torch import optim
-    torch.manual_seed(args.seed)
-    np.random.seed(args.seed)
+    seeds = [int(s) for s in args.seeds.split(",") if s.strip()]
+    if not seeds:
+        _log.error("no seeds parsed from --seeds=%r", args.seeds)
+        return 1
 
     cfg = SlateEncoderConfig(
         slot_feature_dim=X_slot.shape[-1],
@@ -267,25 +306,6 @@ def main() -> int:
         n_slots=n_slots,
         embed_dim=args.embed_dim,
     )
-    model = SlateEncoder(cfg)
-    opt = optim.Adam(model.parameters(), lr=args.lr)
-
-    # train/val split
-    rng = np.random.default_rng(args.seed)
-    perm = rng.permutation(n)
-    n_val = max(1, int(n * args.val_frac))
-    val_idx = perm[:n_val]
-    tr_idx = perm[n_val:]
-
-    def to_t(arr, idx, dtype=torch.float32):
-        return torch.from_numpy(arr[idx]).to(dtype)
-
-    val_slot = to_t(X_slot, val_idx)
-    val_mask = to_t(X_mask, val_idx)
-    val_ctx = to_t(X_ctx, val_idx)
-    val_y_slot = to_t(Y_slot, val_idx)
-    val_y_smask = to_t(Y_slot_mask, val_idx)
-    val_y_skip = to_t(Y_skip, val_idx)
 
     def loss_fn(out, y_slot, y_smask, y_skip):
         # Per-slot MSE only at fired slots (where the target is valid).
@@ -296,45 +316,150 @@ def main() -> int:
         skip_loss = ((out["skip_logit"] - y_skip) ** 2).mean()
         return slot_loss + skip_loss
 
-    best_val = float("inf")
-    best_state = None
-    t0 = time.time()
-    for epoch in range(args.epochs):
-        model.train()
-        ep_perm = rng.permutation(tr_idx)
-        ep_loss = 0.0
-        ep_n = 0
-        for i in range(0, len(ep_perm), args.batch_size):
-            batch_idx = ep_perm[i:i + args.batch_size]
-            slot_t = to_t(X_slot, batch_idx)
-            mask_t = to_t(X_mask, batch_idx)
-            ctx_t = to_t(X_ctx, batch_idx)
-            y_slot_t = to_t(Y_slot, batch_idx)
-            y_smask_t = to_t(Y_slot_mask, batch_idx)
-            y_skip_t = to_t(Y_skip, batch_idx)
-            opt.zero_grad()
-            out = model(slot_t, mask_t, ctx_t)
-            loss = loss_fn(out, y_slot_t, y_smask_t, y_skip_t)
-            loss.backward()
-            opt.step()
-            ep_loss += float(loss.detach()) * len(batch_idx)
-            ep_n += len(batch_idx)
-        train_loss = ep_loss / max(1, ep_n)
-
-        model.eval()
+    def diag_top1(model_, slot_t_, mask_t_, ctx_t_, y_slot_, y_smask_):
+        """PR-1b: rank/top-1 diagnostic. For each pack with >=1 fired
+        slot whose target is valid, compute predicted argmax slot vs
+        ground-truth argmax slot. Returns (top1_acc, n_packs_used)."""
+        model_.eval()
         with torch.no_grad():
-            val_out = model(val_slot, val_mask, val_ctx)
-            val_loss = float(loss_fn(val_out, val_y_slot, val_y_smask, val_y_skip))
-        if val_loss < best_val:
-            best_val = val_loss
-            best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
-        _log.info("epoch=%2d train_loss=%.5f val_loss=%.5f (best=%.5f)",
-                  epoch, train_loss, val_loss, best_val)
-    _log.info("fit took %.1fs; best val_loss=%.5f", time.time() - t0, best_val)
+            out = model_(slot_t_, mask_t_, ctx_t_)
+        # Mask predictions and targets to fired slots only.
+        very_neg = torch.finfo(out["slot_logits"].dtype).min
+        masked_pred = out["slot_logits"].masked_fill(~y_smask_.bool(), very_neg)
+        masked_tgt = y_slot_.masked_fill(~y_smask_.bool(), very_neg)
+        # Skip packs with zero valid slots.
+        any_valid = y_smask_.sum(dim=1) > 0
+        if not any_valid.any():
+            return 0.0, 0
+        pred_top = masked_pred.argmax(dim=1)
+        tgt_top = masked_tgt.argmax(dim=1)
+        match = (pred_top == tgt_top) & any_valid
+        n_used = int(any_valid.sum())
+        return float(match.sum().item()) / max(1, n_used), n_used
+
+    def run_single_seed(seed: int) -> dict:
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        model = SlateEncoder(cfg)
+        opt = optim.Adam(model.parameters(), lr=args.lr)
+
+        rng = np.random.default_rng(seed)
+        perm = rng.permutation(n)
+        n_val = max(1, int(n * args.val_frac))
+        val_idx = perm[:n_val]
+        tr_idx = perm[n_val:]
+
+        def to_t(arr, idx, dtype=torch.float32):
+            return torch.from_numpy(arr[idx]).to(dtype)
+
+        val_slot = to_t(X_slot, val_idx)
+        val_mask = to_t(X_mask, val_idx)
+        val_ctx = to_t(X_ctx, val_idx)
+        val_y_slot = to_t(Y_slot, val_idx)
+        val_y_smask = to_t(Y_slot_mask, val_idx)
+        val_y_skip = to_t(Y_skip, val_idx)
+
+        best_val = float("inf")
+        best_state = None
+        best_top1 = 0.0
+        history = []
+        t_seed = time.time()
+
+        for epoch in range(args.epochs):
+            # PR-1b: linear LR warmup from lr/10 -> lr over the first
+            # warmup_epochs. Stabilizes early training; combined with
+            # grad-clip removes the late-epoch divergence we saw in PR-1.
+            if args.warmup_epochs > 0 and epoch < args.warmup_epochs:
+                warmup_factor = (epoch + 1) / args.warmup_epochs
+                cur_lr = args.lr * (0.1 + 0.9 * warmup_factor)
+            else:
+                cur_lr = args.lr
+            for pg in opt.param_groups:
+                pg["lr"] = cur_lr
+
+            model.train()
+            ep_perm = rng.permutation(tr_idx)
+            ep_loss = 0.0
+            ep_n = 0
+            for i in range(0, len(ep_perm), args.batch_size):
+                batch_idx = ep_perm[i:i + args.batch_size]
+                slot_t = to_t(X_slot, batch_idx)
+                mask_t = to_t(X_mask, batch_idx)
+                ctx_t = to_t(X_ctx, batch_idx)
+                y_slot_t = to_t(Y_slot, batch_idx)
+                y_smask_t = to_t(Y_slot_mask, batch_idx)
+                y_skip_t = to_t(Y_skip, batch_idx)
+                opt.zero_grad()
+                out = model(slot_t, mask_t, ctx_t)
+                loss = loss_fn(out, y_slot_t, y_smask_t, y_skip_t)
+                loss.backward()
+                # PR-1b: gradient clipping.
+                if args.grad_clip > 0:
+                    torch.nn.utils.clip_grad_norm_(
+                        model.parameters(), max_norm=args.grad_clip,
+                    )
+                opt.step()
+                ep_loss += float(loss.detach()) * len(batch_idx)
+                ep_n += len(batch_idx)
+            train_loss = ep_loss / max(1, ep_n)
+
+            model.eval()
+            with torch.no_grad():
+                val_out = model(val_slot, val_mask, val_ctx)
+                val_loss = float(loss_fn(val_out, val_y_slot, val_y_smask, val_y_skip))
+            top1_acc, n_top1_packs = diag_top1(
+                model, val_slot, val_mask, val_ctx, val_y_slot, val_y_smask,
+            )
+            history.append({
+                "epoch": epoch, "lr": cur_lr,
+                "train_loss": train_loss, "val_loss": val_loss,
+                "val_top1_acc": top1_acc, "val_top1_n_packs": n_top1_packs,
+            })
+            improved = val_loss < best_val
+            if improved:
+                best_val = val_loss
+                best_top1 = top1_acc
+                best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+            _log.info(
+                "seed=%d epoch=%2d lr=%.5f train_loss=%.5f val_loss=%.5f "
+                "val_top1=%.4f (n=%d) %s",
+                seed, epoch, cur_lr, train_loss, val_loss,
+                top1_acc, n_top1_packs, "(NEW BEST)" if improved else "",
+            )
+        _log.info(
+            "seed=%d fit took %.1fs; best val_loss=%.5f best_top1=%.4f",
+            seed, time.time() - t_seed, best_val, best_top1,
+        )
+        return {
+            "seed": seed,
+            "best_val_loss": float(best_val),
+            "best_top1_acc": float(best_top1),
+            "best_state": best_state,
+            "history": history,
+        }
+
+    # Train each seed; keep the best-by-val artifact.
+    seed_runs = [run_single_seed(s) for s in seeds]
+    best_seed_run = min(seed_runs, key=lambda r: r["best_val_loss"])
+    best_state = best_seed_run["best_state"]
+    best_val = best_seed_run["best_val_loss"]
+    best_top1 = best_seed_run["best_top1_acc"]
+    _log.info(
+        "best across %d seeds: seed=%d best_val_loss=%.5f best_top1=%.4f",
+        len(seed_runs), best_seed_run["seed"], best_val, best_top1,
+    )
+    # Per-seed summary line (for the diary):
+    _log.info("per-seed summary:")
+    for r in seed_runs:
+        _log.info(
+            "  seed=%d best_val=%.5f best_top1=%.4f",
+            r["seed"], r["best_val_loss"], r["best_top1_acc"],
+        )
 
     # Restore best.
-    if best_state is not None:
-        model.load_state_dict(best_state)
+    model = SlateEncoder(cfg)
+    model.load_state_dict(best_state)
+    model.eval()
 
     # 4) Persist.
     out_path = Path(args.output)
@@ -349,6 +474,14 @@ def main() -> int:
         "trained_at": datetime.utcnow().isoformat(),
         "n_train_examples": int(n),
         "best_val_loss": float(best_val),
+        "best_val_top1_acc": float(best_top1),
+        "best_seed": int(best_seed_run["seed"]),
+        "seeds": seeds,
+        "per_seed_best_val_loss": [
+            {"seed": r["seed"], "best_val_loss": r["best_val_loss"],
+             "best_top1_acc": r["best_top1_acc"]}
+            for r in seed_runs
+        ],
         "data_provider": provider_name,
         "universe": universe,
         "train_start": train_start.isoformat(),
@@ -356,7 +489,15 @@ def main() -> int:
         "epochs": args.epochs,
         "batch_size": args.batch_size,
         "lr": args.lr,
+        "warmup_epochs": args.warmup_epochs,
+        "grad_clip": args.grad_clip,
         "embed_dim": args.embed_dim,
+        # FEAT-34 PR-1b: feature normalization stats. Inference must
+        # apply (x - mean) / std before feeding into the encoder.
+        "ctx_mean": ctx_mean,
+        "ctx_std": ctx_std,
+        "slot_mean": slot_mean,
+        "slot_std": slot_std,
     }
     torch.save(bundle, str(out_path))
 

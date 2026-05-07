@@ -128,6 +128,12 @@ class SetRankerSelectorScorer:
         encoder.load_state_dict(bundle["state_dict"])
         encoder.eval()
         self._model = encoder
+        # PR-1b: feature normalization stats. Old (PR-1) artifacts
+        # don't have these — fall back to identity.
+        self._ctx_mean = bundle.get("ctx_mean")
+        self._ctx_std = bundle.get("ctx_std")
+        self._slot_mean = bundle.get("slot_mean")
+        self._slot_std = bundle.get("slot_std")
         return self._model
 
     def select(
@@ -155,12 +161,20 @@ class SetRankerSelectorScorer:
         slot_mask = build_slot_mask(pack, self.n_strategies)
         ctx = build_ctx_features(pack, feature, self.n_strategies)
 
-        slot_t = torch.from_numpy(slot_rows).unsqueeze(0)         # (1, N, F)
-        mask_t = torch.from_numpy(slot_mask).unsqueeze(0)         # (1, N)
-        ctx_t = torch.from_numpy(ctx).unsqueeze(0)                # (1, ctx_dim)
-
         with self._lock:
             model = self._load()
+        # PR-1b: apply train-time standardization. Skip if the bundle
+        # predates standardization (PR-1 artifact), in which case the
+        # stats are None and we feed raw features.
+        if self._slot_mean is not None and self._slot_std is not None:
+            slot_rows = (slot_rows - self._slot_mean) / self._slot_std
+        if self._ctx_mean is not None and self._ctx_std is not None:
+            ctx = (ctx - self._ctx_mean) / self._ctx_std
+
+        slot_t = torch.from_numpy(slot_rows.astype(np.float32)).unsqueeze(0)  # (1, N, F)
+        mask_t = torch.from_numpy(slot_mask).unsqueeze(0)         # (1, N)
+        ctx_t = torch.from_numpy(ctx.astype(np.float32)).unsqueeze(0)         # (1, ctx_dim)
+
         with torch.no_grad():
             out = model(slot_t, mask_t, ctx_t)
 
