@@ -148,3 +148,10 @@ components:
     selector_v002_masked:
       class: rl_swing.rl.variants.selector_v002_masked.SelectorV002MaskedVariant
       params: {}
+    # FEAT-32 M1: v3 chronological — steps per trading day, action
+    # lattice = Discrete(1 + max_top_k), portfolio state evolves
+    # across steps. The first variant in the project that's actually
+    # full sequential RL.
+    portfolio_v003:
+      class: rl_swing.rl.variants.portfolio_v003.PortfolioV003Variant
+      params: {}
