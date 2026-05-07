@@ -29,6 +29,45 @@ codifies the rule.
 
 ---
 
+## 2026-05-06 (Phase 1, evening) — RESEARCH: masked v2 SHADOW_ONLY — masking unsticks all-skip but seed-stability is poor
+
+**Issue:** [#29](https://github.com/l2code/trading-bot-rl/issues/29)
+**PRs:** scaffold [#67](https://github.com/l2code/trading-bot-rl/pull/67), plumbing [#69](https://github.com/l2code/trading-bot-rl/pull/69)
+**Run:** Kaggle private kernel `crazypenguin/rl-swing-v002-maskableppo-phase-1-private` (43.8 min wall-time, 3 seeds × 500k timesteps + 3 evals each)
+**Diary:** [`2026-05-06_v002_masked_SHADOW_ONLY.md`](diary/2026-05-06_v002_masked_SHADOW_ONLY.md)
+
+First Phase-1 result. The post-Phase-0 unmasked v002 was trapped at
+[0,0,0] all-skip across all 30 evaluation points. With sb3-contrib
+MaskablePPO + `action_masks() = [True, fired_slot_0..N]` on the
+otherwise-identical setup (same seeds 11/22/33, same windows, same
+ent_coef=0.01, same reward), the trained alias diversifies across
+all three strategies (per_strategy_take_counts=[1423, 79, 278]) and
+clears the Phase-24 gate cleanly: 4 of 5 metrics improved vs
+selector_baseline_random (return +4.88 vs +2.17, sharpe +7.46 vs
++7.11, PF 3.51 vs 3.19, take_rate 0.996 vs 0.694), no material
+regressions (DD +0.0435, just under the 0.05 threshold). Phase-24
+gate output: GO.
+
+But the verdict is **SHADOW_ONLY**, not GO, for two reasons either
+of which alone is sufficient: (1) data tier is exploratory yfinance
+— yfinance can never earn decision-grade GO per CLAUDE.md §3.5;
+WRDS replication (#4) gates promotion. (2) eval_history shows the
+cross-seed best alias comes from seed 11 step 300k, where the
+policy briefly escaped all-skip (1613 trades, val 0.5124) and then
+**collapsed back to all-skip** for the remaining 200k steps. Seed
+22 stayed bit-identical to all-skip across all 500k steps. Seed 33
+broke into take-everything from step 50k onward. So masking is
+necessary but not sufficient — only 1-of-3 seeds found a productive
+policy and even that one was transient. Default ent_coef=0.01 is
+likely too low; a textbook entropy-collapse signature.
+
+Recommendation per the diary: do not spend more compute on masked
+v2 at default hyperparams. Per CLAUDE.md §4 Phase 1: next is #30
+supervised ranker baseline (task #47, local-only, no Kaggle quota
+concern), then #8 Optuna sweep on ent_coef + lr against the masked
+variant (acceptance: per_strategy_take_counts diversifies on
+≥3-of-5 seeds). v2 unmasked PPO is closed for further compute.
+
 ## 2026-05-06 (late evening) — RESEARCH: Phase 0 FINAL closure — DRAFT diaries promoted to FINAL_NO_GO
 
 **Issues:** [#2](https://github.com/l2code/trading-bot-rl/issues/2), [#3](https://github.com/l2code/trading-bot-rl/issues/3)

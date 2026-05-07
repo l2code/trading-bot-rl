@@ -54,22 +54,34 @@ For findings, run results, RFC outcomes, and decisions, see
 |---------|------|---------|--------|
 | `filter_v001` | exploratory (yfinance) | **FINAL_NO_GO (post-Phase-0)** | 2026-05-06 |
 | `selector_v002` | exploratory (yfinance) | **FINAL_NO_GO (post-Phase-0)** | 2026-05-06 |
+| `selector_v002_masked` (FEAT-29) | exploratory (yfinance) | **SHADOW_ONLY (Phase 1)** | 2026-05-06 |
 
 > **Phase 0 fully closed** — all 16 P1+P2 simulator/evaluation
 > fixes plus FIX-AUDIT-V2 (#56–#59) and FIX-AUDIT-V3 (#61, #62)
 > merged. Audit-v2 / phase0-final Kaggle runs landed; both
-> variants are FINAL_NO_GO with corrected daily-P&L metrics. v1
-> trained PPO is bit-identical to `baseline_always_take_100`
-> (material-DD regression caps verdict). v2 trained PPO is
+> unmasked variants are FINAL_NO_GO with corrected daily-P&L
+> metrics. v1 trained PPO is bit-identical to `baseline_always_take_100`
+> (material-DD regression caps verdict). v2 unmasked trained PPO is
 > bit-identical to `selector_baseline_always_skip` (3-metric
 > material regression). See diary entries for details.
 
-> **Phase 1 leads with #29 MaskablePPO for v2** — the v2 collapse
-> is a structural action-space issue (illegal-action penalty
-> interacting with default PPO entropy), not a reward issue. Then
-> #30 supervised baseline. v1 PPO is on hold pending #8 Optuna
-> sweep — bit-identical to baseline_always_take_100, so further
-> default-hyperparam runs would burn compute.
+> **Phase 1 step 1 landed (#29 MaskablePPO for v2): SHADOW_ONLY.**
+> Phase-24 gate output is GO (4-of-5 improved, no material
+> regressions); per_strategy_take_counts=[1423, 79, 278]
+> diversifies across all three strategies (vs unmasked [0, 0, 0]).
+> Verdict capped at SHADOW_ONLY by (a) exploratory-tier
+> yfinance (CLAUDE.md §3.5 — promotion to GO requires WRDS, #4)
+> and (b) only 1-of-3 seeds found a productive policy and even
+> that one was transient (seed 11 escaped at step 300k then
+> collapsed back to all-skip; seed 22 stayed all-skip; seed 33
+> broke into take-everything). Masking is necessary but not
+> sufficient — default ent_coef=0.01 looks too low.
+
+> **Phase 1 next:** #30 supervised ranker baseline (task #47,
+> local-only). Then #8 Optuna sweep on `ent_coef` + `lr` against
+> the masked variant (acceptance: diversification on ≥3-of-5
+> seeds). v1 PPO and v2 unmasked PPO are closed for further
+> compute at default hyperparams.
 
 Diary entries linked from `docs/scorecard.md`. Narrative findings
 live in `research/CHANGELOG.md` and the per-entry diary files —
