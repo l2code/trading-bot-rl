@@ -28,7 +28,7 @@ function, in priority order:
 3. **Reproducibility.** Same experiment YAML + same seed = same
    numbers, every time. Kaggle and local must agree to the bit on
    smoke runs.
-4. **Test discipline.** 282 tests today; coverage floor is 85%.
+4. **Test discipline.** 286 tests today; coverage floor is 85%.
    Every new variant ships with its own test module.
 
 What this project explicitly does *not* yet optimize for:
@@ -109,13 +109,33 @@ For findings, run results, RFC outcomes, and decisions, see
 > went take-everything. **v002 selector with default-hyperparam
 > MlpPolicy is structurally exhausted on yfinance.**
 
-> **Phase 1 closes here.** Pivot to Phase 3 architectural work:
-> #34 set/attention slate encoder → #32 portfolio-aware
-> chronological v3 → optionally #27 Optuna formally if the
-> "tuning alone cannot fix this" negative result is worth
-> recording. v1 PPO, v2 unmasked PPO, masked-PPO (with and without
-> FEAT-7), and the supervised ranker are all closed for further
+> **Phase 1 closed.** Pivot to Phase 3 architectural work.
+> v1 PPO, v2 unmasked PPO, masked-PPO (with and without FEAT-7),
+> and the supervised ranker are all closed for further
 > default-hyperparam compute.
+
+> **Phase 3 step 1 PR-1 landed (#34 set/slate encoder cheap diagnostic): SHADOW_ONLY.**
+> DeepSets-style PyTorch encoder + supervised set ranker. First
+> trained policy on yfinance to clear all five Phase-24 gate
+> metrics vs random — including LOWER max_drawdown (0.1539 vs
+> 0.1557). Per_strat distribution [1325, 73, 289] is a real
+> reallocation away from first_fired's [1423, 79, 278]. The slate
+> framing was NOT structurally exhausted; the prior collapse was
+> an MlpPolicy artifact. Cheap-diagnostic acceptance threshold
+> cleared. **PR-2 justified** — wire SlateEncoder as a sb3
+> features extractor for MaskablePPO, one Kaggle private retrain
+> (3 seeds × 500k), strict 3-criterion acceptance. Caveats in the
+> diary: training loss diverged after epoch 23 (early-stop saved
+> epoch 21); single seed; composite score formulaically still
+> trails random despite per-metric domination — none change the
+> verdict but PR-2 is the multi-seed evidence.
+
+> **Phase 3 next:** PR-2 (sb3 features-extractor wiring + Kaggle
+> retrain). If PR-2 clears the strict gate, **#27 Optuna becomes
+> worth running** on top — finally a model class responsive to
+> tuning rather than collapsing to first_fired regardless. If PR-2
+> fails, pivot to #32 chronological v3 OR ship the supervised set
+> ranker directly as the production path.
 
 Diary entries linked from `docs/scorecard.md`. Narrative findings
 live in `research/CHANGELOG.md` and the per-entry diary files —
