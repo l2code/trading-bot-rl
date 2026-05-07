@@ -72,6 +72,17 @@ For findings, run results, RFC outcomes, and decisions, see
 > selector is NO_GO vs random on yfinance 2022. See
 > [`research/diary/2026-05-07_d4_canonical_yfinance_rebaseline.md`](research/diary/2026-05-07_d4_canonical_yfinance_rebaseline.md).
 
+> **D4-b multi-cycle WF on real yfinance (2026-05-07; FIX-#83 yfinance
+> cache fix made it economical, PR #84).** All 4 years tested
+> (2021/2022/2023/2024) show every trained selector NO_GO vs random.
+> 16-of-16 cells are NO_GO. set_ranker DD > random's DD in **4 of 4
+> years** (synthetic-only "lowest DD" claim refuted with multi-year
+> evidence). per_strat distinctness from first_fired survives all 4
+> years. masked-PPO bit-identical to first_fired holds across all
+> regimes. **Phase 1 NO_GO is regime-stable, not 2022-specific.** D2
+> (ratify low-DD shadow lane) formally invalidated. See
+> [`research/diary/2026-05-07_d4b_multi_cycle_yfinance_NO_GO.md`](research/diary/2026-05-07_d4b_multi_cycle_yfinance_NO_GO.md).
+
 > **Phase 0 fully closed** — all 16 P1+P2 simulator/evaluation
 > fixes plus FIX-AUDIT-V2 (#56–#59) and FIX-AUDIT-V3 (#61, #62)
 > merged. Audit-v2 / phase0-final Kaggle runs landed; both

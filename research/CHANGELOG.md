@@ -29,6 +29,47 @@ codifies the rule.
 
 ---
 
+## 2026-05-07 (D4-b multi-cycle yfinance) — RESEARCH: 4-year regime sweep confirms NO_GO; D2 invalidated; "low-DD selector" was synthetic-only
+
+**Issue:** [#5](https://github.com/l2code/trading-bot-rl/issues/5) D4-b
+**PR (cache enabler):** [#84](https://github.com/l2code/trading-bot-rl/pull/84) (FIX-#83 range-coverage cache match)
+**Diary:** [`2026-05-07_d4b_multi_cycle_yfinance_NO_GO.md`](diary/2026-05-07_d4b_multi_cycle_yfinance_NO_GO.md)
+
+After FIX-#83 made the validate path economical (2021 went from 7+
+min hung → 35 sec; full 4-year loop in <1 min), ran canonical-
+yfinance Phase-24 gate on all existing artifacts for 2021/2022/2023/2024.
+
+**16 of 16 cells NO_GO.** Every trained selector loses to random
+in every year tested. Three multi-year reproducibility checks:
+
+  - **set_ranker DD vs random's:** set_ranker has HIGHER DD in 4 of 4
+    years. PR #75's "lowest DD of any policy" claim refuted with
+    multi-year evidence — was 100% synthetic-data artifact, not even
+    regime-fragile.
+  - **set_ranker per_strat distinctness from first_fired:** survives
+    in 4 of 4 years. The DeepSets architecture IS doing real selection
+    beyond priority order across regimes — it's just consistently
+    unprofitable on this data.
+  - **masked-PPO bit-identity vs first_fired:** holds at composite-
+    score level across all 4 years; tiny float drift on absolute
+    return in 2023/2024 but per_strat distributions match. PR #71's
+    finding is regime-stable.
+
+**Implications:**
+
+  - **D2 invalidated.** No production-grade low-DD selector in the
+    current artifact set; D2 should not be ratified as written.
+  - **Phase 1 NO_GO is regime-stable.** Default-hyperparam masked-PPO
+    collapses to first_fired across 2021/2022/2023/2024, not just 2022.
+  - **The slate framing on yfinance starter_equities is structurally
+    exhausted at default-hyperparam selector-class compute.** Path
+    forward (if any): #32 chronological v3 (different decision
+    shape), #4 WRDS canonical (different data tier), or close v002
+    selector research direction entirely.
+
+State: 292 tests passing. Main is on canonical-yfinance multi-year
+verdicts. No live deploys, no in-flight compute.
+
 ## 2026-05-07 (FIX-#78 contamination + 4-step recovery) — STRUCTURAL: every Phase 1 step 1 → Phase 3 step 1 PR-1c verdict was synthetic; 6 diaries corrected
 
 **Issue:** [#78](https://github.com/l2code/trading-bot-rl/issues/78)
