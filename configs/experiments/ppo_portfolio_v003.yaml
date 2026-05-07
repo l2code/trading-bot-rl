@@ -1,0 +1,81 @@
+# PPO portfolio_v003 experiment — v3 chronological selector (FEAT-32 M1).
+#
+# Where v002 stepped once per pack (contextual-bandit shape), v003
+# steps once per trading day. Action = Discrete(1 + max_top_k).
+# Portfolio state (cash / open positions / drawdown) evolves across
+# steps. Reward is daily P&L − DD penalty − turnover penalty.
+#
+# M1 scope: env scaffold + smoke train. No verdict yet — that's M3.
+# The default windows are kept identical to v002 so v002 ↔ v003
+# numbers can be compared apples-to-apples once M3 lands.
+experiment:
+  name: ppo_portfolio_v003
+  algorithm: PPO
+  policy: MlpPolicy
+  feature_pipeline: equities_features_v001
+  universe: starter_equities
+  reward_config_version: reward_v001
+
+  # Selects the v003 variant. The trainer + walk-forward dispatch
+  # via the registry; no other code changes needed to add v003.
+  rl_variant: portfolio_v003
+
+  # FIX-#78 step 2: explicit data_provider — never silently fall back
+  # to synthetic_momentum on a selector / portfolio variant.
+  data_provider: yfinance_daily
+
+  # Same windows as the audit-v2 v002 runs so v003 numbers can be
+  # compared apples-to-apples once M3 lands.
+  train_start: "2014-01-01"
+  train_end:   "2020-12-31"
+  validation_start: "2021-01-01"
+  validation_end:   "2021-12-31"
+  test_start: "2022-01-01"
+  test_end:   "2022-12-31"
+
+  # M1 smoke uses tiny timesteps; M3 will scale to 500k×3 like v002.
+  total_timesteps_initial: 500000
+  total_timesteps_max: 2000000
+  eval_interval_timesteps: 50000
+  early_stopping_patience_evaluations: 10
+  min_validation_delta: 0.01
+  save_best_only: true
+
+  seeds: [11, 22, 33]
+
+  hyperparams:
+    learning_rate: 3.0e-4
+    n_steps: 2048
+    batch_size: 64
+    n_epochs: 10
+    gamma: 0.99
+    gae_lambda: 0.95
+    clip_range: 0.2
+    ent_coef: 0.01
+    vf_coef: 0.5
+    max_grad_norm: 0.5
+    policy_kwargs:
+      net_arch: [128, 128]
+
+  cost_model:
+    base_spread_bps: 3.0
+    base_slippage_bps: 5.0
+    high_volatility_slippage_multiplier: 2.0
+    event_window_slippage_multiplier: 2.0
+    market_impact_coef: 0.10
+    adverse_selection_bps: 2.0
+
+  reward:
+    drawdown_penalty_weight: 0.10
+    turnover_penalty_weight: 0.05
+    holding_period_penalty_weight: 0.02
+    skip_counterfactual_scale: 1.0
+    # v003 is chronological; skip-counterfactual semantics aren't
+    # used (each day is a step regardless of slate emptiness).
+    skip_counterfactual_mode: highest_signal
+
+  # v003-specific knobs read from experiment_config in the variant.
+  v003_max_top_k: 2
+  v003_sampler_window_days: 60
+
+  artifact_root: data/models/
