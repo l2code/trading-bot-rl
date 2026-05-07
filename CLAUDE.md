@@ -57,6 +57,7 @@ For findings, run results, RFC outcomes, and decisions, see
 | `selector_v002_masked` (FEAT-29) | exploratory (yfinance) | **NO_GO** (rebaselined yfinance — superseded the synthetic-tagged SHADOW_ONLY from PR #70) | 2026-05-07 |
 | `selector_baseline_set_ranker` (FEAT-34 PR-1b) | exploratory (yfinance) | **NO_GO** (rebaselined yfinance — superseded the synthetic-tagged SHADOW_ONLY from PR #74/#75) | 2026-05-07 |
 | `selector_baseline_supervised` (FEAT-30 + FEAT-7) | exploratory (yfinance) | **NO_GO** (rebaselined yfinance) | 2026-05-07 |
+| `portfolio_v003` masked-PPO (FEAT-32 M3) | exploratory (yfinance) | **NO_GO** (M3 default-hyperparam Kaggle 500k×3) — bit-identical to `portfolio_baseline_no_op` | 2026-05-07 |
 
 > **FIX-#78 contamination correction (2026-05-07).** Every Phase 1 step 1
 > through Phase 3 step 1 PR-1c verdict (PR #70-#76) was computed on
@@ -179,6 +180,25 @@ For findings, run results, RFC outcomes, and decisions, see
 > as a "low-DD selector" production lane behind explicit operator
 > approval (despite the gate NO_GO, it has the lowest DD of any
 > trading policy on this benchmark).
+
+> **FEAT-32 (chronological v3) progression:**
+> M1 (PR #86) shipped the `ChronologicalSwingEnv` + `portfolio_v003`
+> variant + portfolio tracker scaffold. M2 (PR #88) PASSED the env-
+> learnability diagnostic — supervised BC fit a non-trivial state-
+> dependent target with val_acc=1.00, ruling out env degeneracy.
+> M3 (PR #90 masking infra + this entry's verdict PR for the Kaggle
+> 500k×3 run): **NO_GO**. Trained MaskablePPO is bit-identical to
+> `portfolio_baseline_no_op` across all 3 seeds (per_action [511,0,0],
+> composite 0.325000 to 16 decimals). Phase-24 metric gate trivially
+> "passes" (5/5 improved by zeroing all metrics) but the
+> bit-identity criterion fails — same shape as v002 masked-PPO →
+> first_fired bit-identity (PR #71). v003's architectural shift
+> (per-day chronological vs per-pack contextual-bandit) does not
+> solve the v002 default-hyperparam exploration problem. M2 PASS
+> means any v003 collapse is hyperparam, not architecture, so the
+> M3.b Optuna sweep on ent_coef + lr is the natural next step (per
+> the FEAT-32 plan). M4 (multi-cycle yfinance per D4-b) is moot
+> until M3.b clears the bit-identity gate.
 
 Diary entries linked from `docs/scorecard.md`. Narrative findings
 live in `research/CHANGELOG.md` and the per-entry diary files —
