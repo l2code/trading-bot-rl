@@ -683,6 +683,129 @@ def test_slot_agreement_unfired_slot_emits_zeros():
     assert d["slot_rank_by_signal"] == 0.0
 
 
+# ---------------------------------------------------------------------
+# FEAT-34 PR-1: SlateEncoder permutation-equivariance + SetRankerScorer.
+def test_slate_encoder_permutation_equivariance():
+    """The whole point of #34: when slot ordering changes, per-slot
+    scores must follow that permutation (equivariance), not stay
+    pinned to slot index. Concretely: encode (A, B, C) and (C, A, B)
+    on the same input data; the score for slot 'A' must be the same
+    in both runs.
+
+    This test is the load-bearing invariant for FEAT-34. Regressing
+    it means the encoder isn't permutation-equivariant and the
+    inductive bias has been broken."""
+    import torch
+
+    from rl_swing.rl.agents.slate_encoder import SlateEncoder, SlateEncoderConfig
+
+    torch.manual_seed(11)
+    cfg = SlateEncoderConfig(slot_feature_dim=5, ctx_feature_dim=3, n_slots=3, embed_dim=8)
+    enc = SlateEncoder(cfg)
+    enc.eval()
+
+    # 3 slots, all fired, distinct features so per-slot scores differ.
+    feats = torch.tensor([[
+        [0.1, 0.2, 0.3, 0.4, 0.5],
+        [0.6, 0.7, 0.8, 0.9, 1.0],
+        [0.2, 0.4, 0.6, 0.8, 1.0],
+    ]], dtype=torch.float32)
+    mask = torch.ones((1, 3), dtype=torch.float32)
+    ctx = torch.tensor([[1.0, 2.0, 3.0]], dtype=torch.float32)
+
+    with torch.no_grad():
+        out_orig = enc(feats, mask, ctx)
+    # Permute slot order: (0, 1, 2) -> (2, 0, 1)
+    perm = [2, 0, 1]
+    feats_p = feats[:, perm, :]
+    with torch.no_grad():
+        out_perm = enc(feats_p, mask, ctx)
+    # Slot logits must follow the permutation:
+    # out_perm.slot_logits[0, i] == out_orig.slot_logits[0, perm[i]]
+    assert torch.allclose(
+        out_perm["slot_logits"][0], out_orig["slot_logits"][0, perm], atol=1e-6
+    )
+    # Skip logit is order-invariant (depends only on aggregate + ctx)
+    # so it should be EQUAL across the two orderings.
+    assert torch.allclose(out_orig["skip_logit"], out_perm["skip_logit"], atol=1e-6)
+
+
+def test_slate_encoder_unfired_slots_zero_contribute():
+    """Unfired slots (mask=0) must not move the per-slot logits of
+    OTHER slots. Sanity for the masked-aggregate path: zeroing an
+    unfired slot's input + masking out its max-pool contribution
+    must produce the same fired-slot logits as a pack with only the
+    fired slots and the rest never-existed."""
+    import torch
+
+    from rl_swing.rl.agents.slate_encoder import SlateEncoder, SlateEncoderConfig
+
+    torch.manual_seed(22)
+    cfg = SlateEncoderConfig(slot_feature_dim=3, ctx_feature_dim=2, n_slots=3, embed_dim=4)
+    enc = SlateEncoder(cfg)
+    enc.eval()
+
+    # Pack A: only slot 0 fired.
+    feats_a = torch.tensor([[[0.1, 0.2, 0.3], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]])
+    mask_a = torch.tensor([[1.0, 0.0, 0.0]])
+    # Pack B: same fired slot 0; unfired slots have garbage features
+    # but mask still 0. The encoder must zero them out via mask.
+    feats_b = torch.tensor([[[0.1, 0.2, 0.3], [99.0, 99.0, 99.0], [-50.0, 50.0, -50.0]]])
+    mask_b = torch.tensor([[1.0, 0.0, 0.0]])
+    ctx = torch.tensor([[0.5, 0.5]])
+
+    with torch.no_grad():
+        out_a = enc(feats_a, mask_a, ctx)
+        out_b = enc(feats_b, mask_b, ctx)
+
+    # The phi(x_k) for unfired slots is masked to zero in the
+    # aggregates, but rho_slot still consumes phi(x_k) directly. So
+    # slot 1 and 2 logits will differ between A and B (their phi
+    # depends on their input features). Slot 0's logit should be
+    # identical, since it sees the same (phi(x_0), aggregate, ctx).
+    assert torch.allclose(out_a["slot_logits"][0, 0], out_b["slot_logits"][0, 0], atol=1e-6)
+    # Skip logit too.
+    assert torch.allclose(out_a["skip_logit"], out_b["skip_logit"], atol=1e-6)
+
+
+def test_slate_encoder_handles_zero_fired_pack():
+    """All-unfired pack must not crash and must produce finite outputs.
+    In real use the env never reaches such a pack (the packer drops
+    them) but the encoder shouldn't NaN if it does."""
+    import torch
+
+    from rl_swing.rl.agents.slate_encoder import SlateEncoder, SlateEncoderConfig
+
+    cfg = SlateEncoderConfig(slot_feature_dim=3, ctx_feature_dim=2, n_slots=3, embed_dim=4)
+    enc = SlateEncoder(cfg)
+    enc.eval()
+    feats = torch.zeros((1, 3, 3))
+    mask = torch.zeros((1, 3))
+    ctx = torch.zeros((1, 2))
+    with torch.no_grad():
+        out = enc(feats, mask, ctx)
+    assert torch.isfinite(out["slot_logits"]).all()
+    assert torch.isfinite(out["skip_logit"]).all()
+
+
+def test_set_ranker_scorer_returns_skip_for_empty_pack(tmp_path):
+    """Mirror of the FEAT-30 SupervisedRankerScorer empty-pack test:
+    must short-circuit before touching the model on a zero-fired pack."""
+    from rl_swing.rl.agents.set_ranker_scorer import SetRankerSelectorScorer
+
+    pack = StrategyPack(
+        symbol="X", as_of=datetime(2024, 1, 1),
+        candidates=(None, None, None),
+    )
+    fake_frame = type("FakeFrame", (), {"feature_version": "features_v001_core_daily"})()
+    fake_portfolio = type("FakePortfolio", (), {})()
+    scorer = SetRankerSelectorScorer(
+        artifact_path=str(tmp_path / "missing.pt"),
+        n_strategies=3,
+    )
+    assert scorer.select(pack, fake_frame, fake_portfolio) == 0
+
+
 def test_observation_includes_pack_agreement_and_slot_agreement(synthetic_data):
     """End-to-end: builder.build emits the pack-agreement block in
     the right place and per-slot agreement fields inside each slot

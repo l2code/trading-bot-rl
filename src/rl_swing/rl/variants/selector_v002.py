@@ -147,6 +147,23 @@ class SelectorV002Variant:
                     n_strategies=n_slots,
                 ))
 
+        # FEAT-34 PR-1: set/slate ranker (DeepSets-style PyTorch
+        # encoder). Auto-included when (a) "set_ranker" tag present
+        # in include_baselines AND (b) the artifact exists. Trained
+        # offline via scripts/train_set_ranker.py.
+        if "set_ranker" in ctx.include_baselines:
+            from pathlib import Path
+
+            from rl_swing.rl.agents.set_ranker_scorer import (
+                SetRankerSelectorScorer,
+            )
+            set_path = Path("data/models/selector_baseline_set_ranker/model.pt")
+            if set_path.exists():
+                scorers.append(SetRankerSelectorScorer(
+                    artifact_path=str(set_path),
+                    n_strategies=n_slots,
+                ))
+
         rl_added = False
         if ctx.artifact_path is not None and ctx.artifact_path.exists():
             scorers.append(PpoSelectorScorer(

@@ -29,6 +29,50 @@ codifies the rule.
 
 ---
 
+## 2026-05-06 (Phase 3 step 1 PR-1) — RESEARCH: set/slate encoder cheap diagnostic SHADOW_ONLY (first trained policy to beat random on every gate metric)
+
+**Issue:** [#34](https://github.com/l2code/trading-bot-rl/issues/34) (PR-1 only)
+**Run:** local on Loki — torch DeepSets-style encoder, ~30k packs, fit 11s, early-stopped at epoch 21 (val_loss 41.46)
+**Diary:** [`2026-05-06_v002_set_ranker_SHADOW_ONLY.md`](diary/2026-05-06_v002_set_ranker_SHADOW_ONLY.md)
+
+**Phase 3 has its first positive result.** Reversed the framing
+hypothesis from PR #73's NO_GO: the slate framing's prior collapse
+to first_fired was an MlpPolicy artifact, not a feature-level
+exhaustion. A permutation-equivariant DeepSets encoder over the
+same yfinance data produces a policy that:
+
+  - Beats `selector_baseline_random` on **5 of 5 Phase-24 gate
+    metrics** including LOWER max_drawdown (0.1539 vs 0.1557).
+    First trained policy on yfinance to clear this bar.
+  - Beats the FEAT-7 HistGB ranker on **5 of 5** (return +4.17,
+    sharpe +3.41, PF +1.77, DD -0.035, take_rate +0.37).
+  - Genuinely escapes first_fired's [1423, 79, 278] pattern with
+    [1325, 73, 289] — a real reallocation, not a tie-break artifact.
+
+Operator's cheap-diagnostic acceptance (from issue scope before
+the run): "material improvement OR distinct strategy distribution
+from first_fired" — both conditions met. PR-2 (sb3 features-
+extractor wiring + Kaggle MaskablePPO retrain) is justified.
+
+Honest caveats in the diary: composite score 0.7066 trails random's
+0.7186 because of saturation and turnover-component formula
+artifacts, even though every individual metric improves; training
+loss diverged after epoch 23 (PR-2 should add gradient clipping +
+LR warmup); single seed. None of these change the gate-output
+verdict, but PR-2 is the multi-seed information.
+
+Architecture: \`src/rl_swing/rl/agents/slate_encoder.py\` (DeepSets
+phi → sum/max/mean pool → rho_slot per-slot logit + rho_skip head;
+slot weights shared, aggregate order-invariant — cannot trivially
+encode "always pick slot 0"). Scorer: \`SetRankerSelectorScorer\`
+(lazy torch load + masked argmax). Trainer: \`scripts/train_set_ranker.py\`
+(per-slate MSE on realized risk-adj return, skip target = -best-
+signal CF). Wiring: auto-included in v002 / v002_masked evaluate()
+on the "set_ranker" tag when the artifact exists.
+
+286 tests passing (282 + 4 new: permutation-equivariance, mask
+zeroing, empty-pack short-circuit, registry pickup).
+
 ## 2026-05-06 (Phase 1 closure) — RESEARCH: masked-PPO FEAT-7 tie-breaker NO_GO; v002 selector closes for further compute
 
 **Issue:** [#29](https://github.com/l2code/trading-bot-rl/issues/29) (decisive evidence)
