@@ -60,16 +60,23 @@ Last update: 2026-05-06 after applying SDLC lessons (issue #1).
 | per-strategy training-EV analysis | exploratory (yfinance) | partial-H2 (numbers superseded; ranking stands) | [`2026-05-06_per_strategy_training_ev.md`](../research/diary/2026-05-06_per_strategy_training_ev.md) |
 | `filter_v001` (post-Phase-0) | exploratory (yfinance) | **FINAL_NO_GO** | [`2026-05-06_v001_filter_post_phase0_FINAL_NO_GO.md`](../research/diary/2026-05-06_v001_filter_post_phase0_FINAL_NO_GO.md) |
 | `selector_v002` (post-Phase-0) | exploratory (yfinance) | **FINAL_NO_GO** | [`2026-05-06_v002_selector_post_phase0_FINAL_NO_GO.md`](../research/diary/2026-05-06_v002_selector_post_phase0_FINAL_NO_GO.md) |
+| `selector_v002_masked` (FEAT-29 / Phase 1) | exploratory (yfinance) | **SHADOW_ONLY** | [`2026-05-06_v002_masked_SHADOW_ONLY.md`](../research/diary/2026-05-06_v002_masked_SHADOW_ONLY.md) |
 
 > **Phase 0 fully closed.** Both post-Phase-0 entries are
 > `FINAL_NO_GO` with audit-v2 / phase0-final metrics (daily-P&L
 > basis, FIX-#36; 260 trading days). Pre-Phase-0 entries are
 > retained as historical record with `SUPERSEDED` banners. v1
 > trained PPO is bit-identical to `baseline_always_take_100`
-> (material-DD regression caps verdict). v2 trained PPO is
+> (material-DD regression caps verdict). v2 unmasked trained PPO is
 > bit-identical to `selector_baseline_always_skip` (3-metric
-> material regression). Phase 1 leads with #29 MaskablePPO for v2
-> and #30 supervised ranker baseline.
+> material regression). Phase 1 step 1 (#29 MaskablePPO) **landed
+> SHADOW_ONLY** — Phase-24 gate output GO (4-of-5 improved, no
+> material regressions); per_strategy_take_counts diversifies; but
+> tier-bound to exploratory (yfinance can't earn GO without WRDS)
+> and seed-stability is poor (1 of 3 seeds found a productive
+> policy and even that one was transient). Phase 1 next: #30
+> supervised ranker baseline, then #8 Optuna sweep against the
+> masked variant.
 
 ## Roadmap progress
 
