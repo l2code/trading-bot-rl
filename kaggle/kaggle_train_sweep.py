@@ -32,7 +32,15 @@ specific knob):
                                       {"ent_coef":0.05,"learning_rate":3e-4}]``
 
 Outputs (in ``/kaggle/working``):
-  - ``sweep_summary.json``  — top-level aggregate (one entry per cell).
+  - ``sweep_summary.json``  — aggregate of all cells' summaries.
+    Written incrementally after every cell (atomic tmp+rename) so a
+    Kaggle worker restart mid-sweep can't lose more than the
+    in-flight cell. Carries ``complete: false`` until the final write
+    flips it to ``true`` after the last cell.
+  - ``progress.json``       — heartbeat. ``{cells_done, cells_total,
+    current, elapsed_s, status}``. Updated before each cell starts +
+    after each cell completes. The host can pull this with
+    ``kaggle kernels output --force`` once Kaggle has flushed it.
   - ``artifacts/cell_<NN>/...``  — per-cell training artifacts.
   - ``cell_<NN>/validation_summary.json`` — per-cell validate output.
 
@@ -138,7 +146,75 @@ total_timesteps = int(TOTAL_STEPS) if TOTAL_STEPS else None
 
 cell_results: list[dict] = []
 sweep_t0 = time.time()
+SUMMARY_PATH = WORKING / "sweep_summary.json"
+PROGRESS_PATH = WORKING / "progress.json"
+
+
+def _write_progress(*, cells_done: int, current: dict | None,
+                    elapsed_s: float, status: str) -> None:
+    """Per-cell heartbeat. Crash-safe: replaces atomically via tmp+rename
+    so a Kaggle worker restart can't catch a half-written progress file.
+    Cheap; written N+1 times per sweep (start + after each of N cells).
+
+    A fresh process started after a worker restart can read this to
+    decide whether the sweep already produced a usable partial summary;
+    today the kernel just retries from cell 0, but downstream tooling
+    (the host orchestrator) can branch on it.
+    """
+    payload = {
+        "cells_done": int(cells_done),
+        "cells_total": int(len(SWEEP_CELLS)),
+        "current": current,
+        "elapsed_s": float(elapsed_s),
+        "status": status,
+    }
+    tmp = PROGRESS_PATH.with_suffix(".json.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, default=str)
+    tmp.replace(PROGRESS_PATH)
+
+
+def _write_summary_partial(elapsed_s: float) -> None:
+    """Per-cell incremental write of sweep_summary.json.
+
+    The all-at-end aggregation in the previous version was lost on the
+    M3.b run when Kaggle restarted the worker after cell 09 of 12, so
+    every cell's metric data sat in process memory and never reached
+    disk. This atomic-replace pattern guarantees that a worker restart
+    can't lose more than the current in-flight cell.
+
+    Cost: ~1-2 KB per cell × 12 cells = ~25 KB writes amortized over
+    a 4 hr run. Negligible.
+    """
+    payload = {
+        "experiment": EXPERIMENT,
+        "total_timesteps_per_seed": total_timesteps,
+        "seeds": seeds,
+        "data_provider": DATA_PROVIDER,
+        "n_envs": N_ENVS,
+        "sweep_secs": float(elapsed_s),
+        "n_cells": len(SWEEP_CELLS),
+        "cells_completed": len(cell_results),
+        "complete": False,  # set True only by the final write at end
+        "cells": cell_results,
+    }
+    tmp = SUMMARY_PATH.with_suffix(".json.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, default=str)
+    tmp.replace(SUMMARY_PATH)
+
+
+# Initial heartbeat: before any cell starts, so a very-fast restart
+# still leaves a progress.json on disk.
+_write_progress(cells_done=0, current=None, elapsed_s=0.0, status="starting")
+
 for i, cell in enumerate(SWEEP_CELLS):
+    _write_progress(
+        cells_done=len(cell_results),
+        current={"cell_idx": i, "hyperparam_overrides": cell},
+        elapsed_s=time.time() - sweep_t0,
+        status="cell_running",
+    )
     print(f"\n========== cell {i:02d}/{len(SWEEP_CELLS) - 1}  hyperparams={cell} ==========")
     cell_artifact_root = ARTIFACTS / f"cell_{i:02d}"
     cell_artifact_root.mkdir(parents=True, exist_ok=True)
@@ -187,27 +263,45 @@ for i, cell in enumerate(SWEEP_CELLS):
         "validation_summary": val_summary,
         "val_error": val_error,
     })
+    # Per-cell incremental write so Kaggle worker restart can't lose
+    # more than the in-flight cell. M3.b's first attempt lost 10 cells
+    # to exactly this — see research/diary/2026-05-07_feat32_m3_kaggle_NO_GO.md.
+    elapsed_now = time.time() - sweep_t0
+    _write_summary_partial(elapsed_s=elapsed_now)
+    _write_progress(
+        cells_done=len(cell_results), current=None,
+        elapsed_s=elapsed_now, status="cell_done",
+    )
     print(
         f"[kaggle_train_sweep] cell {i:02d} done in {train_secs:.0f}s "
-        f"(train_error={bool(train_error)} val_error={bool(val_error)})"
+        f"(train_error={bool(train_error)} val_error={bool(val_error)}); "
+        f"sweep_summary.json updated  ({len(cell_results)}/{len(SWEEP_CELLS)} cells)"
     )
 
 sweep_secs = time.time() - sweep_t0
 
 
 # ----------------------------------------------------------------------
-# 3) Aggregate sweep_summary.json.
+# 3) Final aggregate sweep_summary.json with complete=True flag.
+# Mirrors the per-cell partial writes above; the only difference is
+# the ``complete`` flag and the absence of a current/in-flight cell.
 # ----------------------------------------------------------------------
-summary_path = WORKING / "sweep_summary.json"
-with open(summary_path, "w", encoding="utf-8") as f:
-    json.dump({
-        "experiment": EXPERIMENT,
-        "total_timesteps_per_seed": total_timesteps,
-        "seeds": seeds,
-        "data_provider": DATA_PROVIDER,
-        "n_envs": N_ENVS,
-        "sweep_secs": sweep_secs,
-        "n_cells": len(SWEEP_CELLS),
-        "cells": cell_results,
-    }, f, indent=2, default=str)
-print(f"[kaggle_train_sweep] wrote {summary_path}  (total {sweep_secs:.0f}s)")
+final_payload = {
+    "experiment": EXPERIMENT,
+    "total_timesteps_per_seed": total_timesteps,
+    "seeds": seeds,
+    "data_provider": DATA_PROVIDER,
+    "n_envs": N_ENVS,
+    "sweep_secs": sweep_secs,
+    "n_cells": len(SWEEP_CELLS),
+    "cells_completed": len(cell_results),
+    "complete": True,
+    "cells": cell_results,
+}
+with open(SUMMARY_PATH, "w", encoding="utf-8") as f:
+    json.dump(final_payload, f, indent=2, default=str)
+_write_progress(
+    cells_done=len(cell_results), current=None,
+    elapsed_s=sweep_secs, status="complete",
+)
+print(f"[kaggle_train_sweep] wrote {SUMMARY_PATH}  (total {sweep_secs:.0f}s)")
